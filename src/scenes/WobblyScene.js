@@ -50,8 +50,10 @@ export default class WobblyScene extends Phaser.Scene {
     this.buildBtnEl      = null;
     this.attachmentText  = null;
     this.islandLabel     = null;
+    this.scoreText       = null;
     this.msgText         = null;
     this.msgTimer        = 0;
+    this.score           = 0;
     this.clouds          = [];
     this.snowflakes      = [];
     this.currentIsland   = 'beach';
@@ -62,6 +64,7 @@ export default class WobblyScene extends Phaser.Scene {
     this.snowGfx         = null;
     this.emberGfx        = null;
     this.embers          = [];
+    this.planetCurveGfx  = null;
   }
 
   create() {
@@ -109,6 +112,8 @@ export default class WobblyScene extends Phaser.Scene {
 
     this.cursors  = this.input.keyboard.createCursorKeys();
     this.spaceKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
+
+    this.planetCurveGfx = this.add.graphics().setScrollFactor(0).setDepth(90);
 
     this._createUI();
     this._showMsg('Welcome to Wobbly Beach!\nType anything in the box to build it.');
@@ -306,7 +311,7 @@ export default class WobblyScene extends Phaser.Scene {
     this._sign(FROZEN_X + 14,  '🧊 FROZEN PEAKS\nSlippery!',         0xB3E5FC, 0x1A4A6A);
     this._sign(GAPS[3].x - 20, '⚠ SPACE VOID\nneed to FLY',         0x9E9E9E, 0x111111);
     this._sign(SPACE_X + 14,   '🚀 SPACE JUNK\nWeird gravity!',      0x9E9E9E, 0x111111);
-    this._sign(WORLD_W - 80,   'THE END!\n(for now)',                 0xFFE082, 0x5D3A00);
+    this._sign(WORLD_W - 80,   '→ LOOPS BACK\nto Beach!',             0x80D8FF, 0x0D47A1);
   }
 
   _buildGapVisuals(H) {
@@ -433,6 +438,10 @@ export default class WobblyScene extends Phaser.Scene {
       fontSize: '19px', fill: '#fff', stroke: '#1a2a1a', strokeThickness: 3, fontStyle: 'bold',
     }).setScrollFactor(0).setDepth(100);
 
+    this.scoreText = this.add.text(W / 2, 12, '⭐ 0', {
+      fontSize: '22px', fill: '#FFE44D', stroke: '#1a1a2a', strokeThickness: 3, fontStyle: 'bold',
+    }).setOrigin(0.5, 0).setScrollFactor(0).setDepth(100);
+
     this.add.text(12, H-90, '← → walk   SPACE jump/fly', {
       fontSize: '12px', fill: '#aaa', stroke: '#000', strokeThickness: 2,
     }).setScrollFactor(0).setDepth(100);
@@ -485,12 +494,9 @@ export default class WobblyScene extends Phaser.Scene {
 
     const item = this.buildSystem.interpret(raw);
 
-    if (this.attachments.length > 0) {
-      const keep = window.confirm(
-        `You have:\n${this.attachments.map(a=>`${a.emoji} ${a.name}`).join('\n')}\n\nStack ${item.emoji} ${item.name} on top?\n[OK = stack  |  Cancel = replace]`
-      );
-      if (!keep) { this.attachments = []; this.stickman.clearAttachments(); }
-    }
+    // Auto-replace: one item at a time
+    this.attachments = [];
+    this.stickman.clearAttachments();
 
     this.attachments.push(item);
     this.stickman.addAttachment(item);
@@ -539,6 +545,13 @@ export default class WobblyScene extends Phaser.Scene {
   // ── Collision & Events ────────────────────────────────────
 
   _handlePlayerNPCCollision(npc) {
+    const playerBottom = this.stickman.physBody.y + 30;
+    const velY         = this.stickman.physBody.body.velocity.y;
+    // Bop: player feet above NPC mid-point and moving downward (or just landing)
+    if (playerBottom < npc.physBody.y && velY >= -20) {
+      this._onBop(npc);
+      return;
+    }
     if (!npc.isAngry && this._hasRammingItem()) {
       npc.makeAngry(this.stickman);
       this._showMsg('😤 They\'re FURIOUS!\nBuild something to escape!');
@@ -547,8 +560,24 @@ export default class WobblyScene extends Phaser.Scene {
     }
   }
 
+  _onBop(npc) {
+    if ((npc._bopCooldown ?? 0) > 0) return;
+    npc._bopCooldown = 1.5;
+
+    // Bounce player up
+    this.stickman.physBody.body.setVelocityY(-280);
+    this._addScore(1);
+    npc.giveUp();
+
+    const pts = this.add.text(npc.physBody.x, npc.physBody.y - 50, '⭐ BOOP! +1', {
+      fontSize: '16px', fill: '#FFE44D', stroke: '#000', strokeThickness: 3, fontStyle: 'bold',
+    }).setOrigin(0.5).setDepth(80);
+    this.tweens.add({ targets: pts, y: pts.y - 50, alpha: 0, duration: 900, onComplete: () => pts.destroy() });
+  }
+
   _triggerCaught(npc) {
     this.catchCooldown = 2.5;
+    this._addScore(-1);
     const dir = this.stickman.x > npc.physBody.x ? 1 : -1;
     this.stickman.physBody.body.setVelocityX(dir * 420);
     this.stickman.physBody.body.setVelocityY(-210);
@@ -660,6 +689,21 @@ export default class WobblyScene extends Phaser.Scene {
   _hasRammingItem() { return this.attachments.some(a => a.type==='wheels' && (a.speed??0)>=130); }
   _hasFastEscape()  { return this.stickman.canFly || this.stickman.moveSpeed > 250; }
 
+  _addScore(n) {
+    this.score += n;
+    this.scoreText.setText(`⭐ ${this.score}`);
+  }
+
+  _drawPlanetCurve() {
+    const W = this.scale.width;
+    const scrollY = this.cameras.main.scrollY;
+    const groundScreenY = GROUND_Y - scrollY;
+    const R = 2500;
+    this.planetCurveGfx.clear();
+    this.planetCurveGfx.lineStyle(3, 0x1a3050, 0.28);
+    this.planetCurveGfx.strokeCircle(W / 2, groundScreenY + R, R);
+  }
+
   _showMsg(msg) { this.msgText.setText(msg); this.msgTimer = 4; }
 
   _updateHUD() {
@@ -675,13 +719,26 @@ export default class WobblyScene extends Phaser.Scene {
     const dt = delta / 1000;
 
     this.stickman?.update(time, delta, this.cursors, this.spaceKey);
-    for (const npc of this.npcs) npc.update(time, delta);
+    for (const npc of this.npcs) {
+      npc.update(time, delta);
+      if ((npc._bopCooldown ?? 0) > 0) npc._bopCooldown -= dt;
+    }
+
+    // ── World wrap (planet loop) ──────────────────────────
+    const px = this.stickman.physBody.x;
+    if (px > WORLD_W - 50) {
+      this.stickman.physBody.setPosition(80, this.stickman.physBody.y);
+      this._showMsg('🌍 Around the planet!\nBack to Wobbly Beach!');
+    } else if (px < 50) {
+      this.stickman.physBody.setPosition(WORLD_W - 80, this.stickman.physBody.y);
+    }
 
     this._checkGaps(dt);
     this._checkNPCGiveUp();
     this._checkEnvironment();
     this._checkIslandTransition();
     this._updateParticles(dt);
+    this._drawPlanetCurve();
 
     if (this.catchCooldown > 0) this.catchCooldown -= dt;
 
