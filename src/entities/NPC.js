@@ -12,6 +12,8 @@ export class NPC {
     this.speed      = this.baseSpeed;
     this.isAngry    = false;
     this.angryTarget = null;
+    this.isFallen   = false;
+    this.fallTimer  = 0;
 
     this.physBody = scene.add.rectangle(x, y, 18, 55);
     scene.physics.add.existing(this.physBody);
@@ -21,6 +23,16 @@ export class NPC {
 
     this.gfx = scene.add.graphics();
     this.gfx.setDepth(15);
+  }
+
+  knockDown() {
+    if (this.isFallen) return;
+    this.isFallen    = true;
+    this.fallTimer   = 2.5;
+    this.isAngry     = false;
+    this.angryTarget = null;
+    this.speed       = this.baseSpeed;
+    this.physBody.body.setVelocityX(0);
   }
 
   giveUp() {
@@ -52,6 +64,17 @@ export class NPC {
 
     const onGround = this.physBody.body.blocked.down;
 
+    if (this.isFallen) {
+      this.fallTimer -= dt;
+      this.physBody.body.setVelocityX(0);
+      if (this.fallTimer <= 0) {
+        this.isFallen  = false;
+        this.walkTimer = 2 + Math.random() * 2;
+      }
+      this._draw();
+      return;
+    }
+
     if (this.isAngry && this.angryTarget) {
       const dx = this.angryTarget.x - this.physBody.x;
       this.walkDir = dx > 0 ? 1 : -1;
@@ -73,10 +96,55 @@ export class NPC {
     const t  = this.wobbleTime;
     const sp = this.stepPhase;
 
+    if (this.isFallen) { this._drawFallen(g, x, y, t); return; }
+
     switch (this.islandType) {
       case 'frozen': this._drawPenguin(g, x, y, sp, t); break;
       case 'space':  this._drawAstronaut(g, x, y, sp, t); break;
       default:       this._drawDefault(g, x, y, sp, t); break;
+    }
+  }
+
+  _drawFallen(g, x, y, t) {
+    const skins = { beach: 0xFFDDCC, jungle: 0xFFCC88, volcano: 0xFF9966, frozen: 0xDDDDDD, space: 0xCCCCCC };
+    const skin  = skins[this.islandType] ?? 0xFFDDCC;
+
+    // Horizontal body
+    g.lineStyle(2.5, 0x333333);
+    g.lineBetween(x - 18, y + 20, x + 8, y + 20);
+
+    // Head (to the right)
+    g.fillStyle(skin);
+    g.fillCircle(x + 19, y + 20, 11);
+    g.strokeCircle(x + 19, y + 20, 11);
+
+    // X eyes
+    g.lineStyle(2, 0x333333);
+    g.lineBetween(x + 14, y + 15, x + 19, y + 20);
+    g.lineBetween(x + 19, y + 15, x + 14, y + 20);
+    g.lineBetween(x + 19, y + 15, x + 24, y + 20);
+    g.lineBetween(x + 24, y + 15, x + 19, y + 20);
+
+    // Wavy panic mouth
+    g.lineStyle(1.5, 0x333333);
+    g.lineBetween(x + 15, y + 24, x + 17, y + 26);
+    g.lineBetween(x + 17, y + 26, x + 21, y + 24);
+    g.lineBetween(x + 21, y + 24, x + 23, y + 26);
+
+    // Arms flopped out
+    g.lineStyle(2.5, 0x333333);
+    g.lineBetween(x - 4, y + 20, x - 6, y + 6);
+    g.lineBetween(x - 4, y + 20, x - 6, y + 34);
+
+    // Legs splayed
+    g.lineBetween(x - 18, y + 20, x - 26, y + 11);
+    g.lineBetween(x - 18, y + 20, x - 26, y + 29);
+
+    // Rotating stars around head
+    g.fillStyle(0xFFD700);
+    for (let i = 0; i < 4; i++) {
+      const a = t * 5 + (i * Math.PI / 2);
+      g.fillCircle(x + 19 + Math.cos(a) * 18, y + 20 + Math.sin(a) * 9, 3);
     }
   }
 

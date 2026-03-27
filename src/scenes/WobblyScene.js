@@ -65,6 +65,7 @@ export default class WobblyScene extends Phaser.Scene {
     this.emberGfx        = null;
     this.embers          = [];
     this.planetCurveGfx  = null;
+    this._gameEnded      = false;
   }
 
   create() {
@@ -561,13 +562,12 @@ export default class WobblyScene extends Phaser.Scene {
   }
 
   _onBop(npc) {
-    if ((npc._bopCooldown ?? 0) > 0) return;
-    npc._bopCooldown = 1.5;
+    if (npc.isFallen || (npc._bopCooldown ?? 0) > 0) return;
+    npc._bopCooldown = 2.5;
 
-    // Bounce player up
     this.stickman.physBody.body.setVelocityY(-280);
     this._addScore(1);
-    npc.giveUp();
+    npc.knockDown();
 
     const pts = this.add.text(npc.physBody.x, npc.physBody.y - 50, '⭐ BOOP! +1', {
       fontSize: '16px', fill: '#FFE44D', stroke: '#000', strokeThickness: 3, fontStyle: 'bold',
@@ -689,6 +689,56 @@ export default class WobblyScene extends Phaser.Scene {
   _hasRammingItem() { return this.attachments.some(a => a.type==='wheels' && (a.speed??0)>=130); }
   _hasFastEscape()  { return this.stickman.canFly || this.stickman.moveSpeed > 250; }
 
+  _checkNPCProximity() {
+    for (const npc of this.npcs) {
+      if (npc.isFallen || npc.isAngry) continue;
+      const dx = Math.abs(this.stickman.x - npc.physBody.x);
+      const dy = Math.abs(this.stickman.y - npc.physBody.y);
+      if (dx < 170 && dy < 80) npc.makeAngry(this.stickman);
+    }
+  }
+
+  _gameOver() {
+    if (this._gameEnded) return;
+    this._gameEnded = true;
+
+    this.stickman.physBody.body.setVelocityX(0);
+    this.cameras.main.shake(400, 0.012);
+
+    const W = this.scale.width, H = this.scale.height;
+
+    this.add.rectangle(W / 2, H / 2, W, H, 0x000011, 0.82)
+      .setScrollFactor(0).setDepth(200);
+
+    this.add.text(W / 2, H / 2 - 90, '🌍 PLANET COMPLETE!', {
+      fontSize: '34px', fill: '#FFE44D', stroke: '#1a1a2a', strokeThickness: 4, fontStyle: 'bold',
+    }).setOrigin(0.5).setScrollFactor(0).setDepth(201);
+
+    this.add.text(W / 2, H / 2 - 30, `Final Score: ${this.score} ⭐`, {
+      fontSize: '30px', fill: '#ffffff', stroke: '#000', strokeThickness: 3, fontStyle: 'bold',
+    }).setOrigin(0.5).setScrollFactor(0).setDepth(201);
+
+    const msg = this.score >= 10 ? 'Absolute legend. 🏆'
+      : this.score >= 5  ? 'Not bad, wobbly one.'
+      : this.score >= 1  ? 'At least you tried.'
+      : this.score < 0   ? 'They got you more than you got them...'
+      : 'Zero? You just ran.';
+
+    this.add.text(W / 2, H / 2 + 30, msg, {
+      fontSize: '18px', fill: '#aaddff', stroke: '#000', strokeThickness: 2,
+    }).setOrigin(0.5).setScrollFactor(0).setDepth(201);
+
+    this.add.text(W / 2, H / 2 + 80, 'Press SPACE to play again', {
+      fontSize: '16px', fill: '#888', stroke: '#000', strokeThickness: 2,
+    }).setOrigin(0.5).setScrollFactor(0).setDepth(201);
+
+    this.time.delayedCall(600, () => {
+      this.input.keyboard.once('keydown-SPACE', () => {
+        this.scene.restart();
+      });
+    });
+  }
+
   _addScore(n) {
     this.score += n;
     this.scoreText.setText(`⭐ ${this.score}`);
@@ -716,6 +766,7 @@ export default class WobblyScene extends Phaser.Scene {
   // ── Update loop ──────────────────────────────────────────
 
   update(time, delta) {
+    if (this._gameEnded) return;
     const dt = delta / 1000;
 
     this.stickman?.update(time, delta, this.cursors, this.spaceKey);
@@ -724,17 +775,18 @@ export default class WobblyScene extends Phaser.Scene {
       if ((npc._bopCooldown ?? 0) > 0) npc._bopCooldown -= dt;
     }
 
-    // ── World wrap (planet loop) ──────────────────────────
+    // ── Planet loop / game end ────────────────────────────
     const px = this.stickman.physBody.x;
     if (px > WORLD_W - 50) {
-      this.stickman.physBody.setPosition(80, this.stickman.physBody.y);
-      this._showMsg('🌍 Around the planet!\nBack to Wobbly Beach!');
+      this._gameOver();
+      return;
     } else if (px < 50) {
       this.stickman.physBody.setPosition(WORLD_W - 80, this.stickman.physBody.y);
     }
 
     this._checkGaps(dt);
     this._checkNPCGiveUp();
+    this._checkNPCProximity();
     this._checkEnvironment();
     this._checkIslandTransition();
     this._updateParticles(dt);
