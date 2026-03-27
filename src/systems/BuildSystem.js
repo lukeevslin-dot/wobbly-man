@@ -26,6 +26,29 @@ const ITEM_DB = [
   { keywords: ['boat', 'ship', 'sailboat', 'canoe', 'kayak'], name: 'Boat', emoji: '⛵', position: 'feet', type: 'wheels', speed: 70, canSwim: true, color: 0x8B4513, description: 'For nautical adventures! Also walks funny on land.' },
   { keywords: ['floaties', 'floaty', 'arm floaties', 'swim ring', 'inflatable', 'floatation'], name: 'Floaties', emoji: '🏊', position: 'back', type: 'wings', canSwim: true, speed: 30, color: 0xFF6699, description: 'Fashionable AND buoyant.' },
   { keywords: ['surfboard', 'surf board', 'surf'], name: 'Surfboard', emoji: '🏄', position: 'feet', type: 'wheels', speed: 90, canSwim: true, color: 0xFF9900, description: 'Hang ten! Or trip over it. Probably trip.' },
+  { keywords: ['swim fins', 'fins', 'flippers'], name: 'Swim Fins', emoji: '🦈', position: 'feet', type: 'wheels', speed: 60, canSwim: true, color: 0x0088FF, description: 'Big rubbery flippers. Terrible on land. Great in water.' },
+  { keywords: ['submarine', 'sub'], name: 'Submarine', emoji: '🤿', position: 'back', type: 'jetpack', canFly: true, canSwim: true, flySpeed: -120, speed: 50, color: 0xFFD700, description: 'A whole submarine. It also works on land somehow.' },
+
+  // Volcano
+  { keywords: ['fire suit', 'firesuit', 'heat suit', 'lava suit', 'heat shield'], name: 'Fire Suit', emoji: '🔥', position: 'back', type: 'jetpack', canFly: true, flySpeed: -160, speed: 40, color: 0xFF4500, description: 'Rated for up to 3000°C. Probably.' },
+  { keywords: ['lava board', 'lavaboard', 'lava surfboard'], name: 'Lava Board', emoji: '🌋', position: 'feet', type: 'wheels', canFly: true, flySpeed: -150, speed: 80, canSwim: true, color: 0xFF6600, description: 'A board that hovers over lava. Very normal.' },
+  { keywords: ['fire boots', 'fireboots', 'heat boots'], name: 'Fire Boots', emoji: '👢', position: 'feet', type: 'rockets', canFly: true, flySpeed: -140, speed: 70, jumpBoost: -80, color: 0xFF4500, description: 'Your feet are literally on fire. Still better than no shoes.' },
+
+  // Frozen
+  { keywords: ['snowmobile', 'snow mobile', 'snowcat'], name: 'Snowmobile', emoji: '🛷', position: 'feet', type: 'wheels', speed: 160, color: 0xADD8E6, description: 'VAROOM on the snow. Also slides everywhere.' },
+  { keywords: ['ice skates', 'iceskates', 'figure skates'], name: 'Ice Skates', emoji: '⛸️', position: 'feet', type: 'wheels', speed: 120, color: 0x87CEEB, description: 'You go VERY fast. Stopping is someone else\'s problem.' },
+  { keywords: ['sled', 'sledge', 'toboggan'], name: 'Sled', emoji: '🛷', position: 'feet', type: 'wheels', speed: 100, color: 0xD2691E, description: 'Great downhill. Useless uphill. Whoops.' },
+  { keywords: ['snow boots', 'snowboots', 'snow shoes', 'snowshoes'], name: 'Snow Boots', emoji: '🥾', position: 'feet', type: 'springs', jumpBoost: -120, speed: 40, color: 0xFFFFFF, description: 'Big fluffy boots. You look ridiculous. You jump high.' },
+
+  // Space
+  { keywords: ['space boots', 'spaceboots', 'gravity boots', 'moon boots'], name: 'Gravity Boots', emoji: '🚀', position: 'feet', type: 'rockets', canFly: true, flySpeed: -100, speed: 50, jumpBoost: -150, color: 0x888888, description: 'These boots were made for floating.' },
+  { keywords: ['rocket pack', 'rocketpack', 'booster pack'], name: 'Rocket Pack', emoji: '🛸', position: 'back', type: 'jetpack', canFly: true, flySpeed: -230, speed: 90, color: 0xCCCCCC, description: 'A massive rocket pack. You are basically a missile now.' },
+  { keywords: ['laser legs', 'laser', 'lasers'], name: 'Laser Legs', emoji: '⚡', position: 'feet', type: 'wheels', speed: 220, color: 0xFF00FF, description: 'Laser-powered legs. Illegal in 14 star systems.' },
+
+  // Jungle
+  { keywords: ['vine', 'vine swing', 'liana', 'grapple', 'grappling hook'], name: 'Vine Swing', emoji: '🌿', position: 'back', type: 'wings', canFly: true, flySpeed: -155, speed: 40, color: 0x4CAF50, description: 'Swing through the jungle like a complete disaster.' },
+  { keywords: ['machete', 'machette', 'sword'], name: 'Machete Legs', emoji: '🔪', position: 'feet', type: 'wheels', speed: 140, color: 0xC0C0C0, description: 'Machetes strapped to the legs. Fast AND terrifying.' },
+  { keywords: ['monkey', 'monkey arms', 'monkey bars'], name: 'Monkey Arms', emoji: '🐒', position: 'back', type: 'wings', canFly: true, flySpeed: -130, speed: 60, color: 0x8B4513, description: 'Big floppy monkey arms. You swing now.' },
 ];
 
 export class BuildSystem {

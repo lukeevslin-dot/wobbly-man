@@ -18,6 +18,7 @@ export class Stickman {
     this.jumpVelocity = -420;
     this.canFly = false;
     this.flySpeed = -200;
+    this.frictionFactor = 0.75; // scene can override for ice
 
     // Physics body (invisible rectangle)
     this.physBody = scene.add.rectangle(x, y, 22, 60);
@@ -99,7 +100,7 @@ export class Stickman {
       this.facingRight = true;
       this.isMoving = true;
     } else {
-      body.setVelocityX(body.velocity.x * 0.75);
+      body.setVelocityX(body.velocity.x * this.frictionFactor);
     }
 
     // Jump
