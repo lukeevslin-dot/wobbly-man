@@ -90,6 +90,30 @@ export default class WobblyScene extends Phaser.Scene {
   }
 
   create() {
+    // ── Reset all mutable state so scene.restart() works ──────
+    this._gameEnded      = false;
+    this._inGameOver     = false;
+    this._gameStarted    = false;
+    this._awaitingStart  = false;
+    this.score           = 125;
+    this.attachments     = [];
+    this.npcs            = [];
+    this.clouds          = [];
+    this.snowflakes      = [];
+    this.embers          = [];
+    this.mountains       = [];
+    this.birds           = [];
+    this.catchCooldown   = 0;
+    this.gapWarnCooldown = 0;
+    this.birdHitCooldown = 0;
+    this.msgTimer        = 0;
+    this.currentIsland   = 'beach';
+    this._fireDrainTimer = 0;
+
+    // Remove leftover DOM elements from previous run
+    if (this.buildInputEl?.parentNode) { this.buildInputEl.remove(); this.buildInputEl = null; }
+    if (this.buildBtnEl?.parentNode)   { this.buildBtnEl.remove();   this.buildBtnEl   = null; }
+
     const H = this.scale.height;
     this.physics.world.setBounds(0, 0, WORLD_W, H * 2);
 
