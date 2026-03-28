@@ -53,7 +53,7 @@ export default class WobblyScene extends Phaser.Scene {
     this.scoreText       = null;
     this.msgText         = null;
     this.msgTimer        = 0;
-    this.score           = 0;
+    this.score           = 100;
     this.clouds          = [];
     this.snowflakes      = [];
     this.currentIsland   = 'beach';
@@ -439,8 +439,8 @@ export default class WobblyScene extends Phaser.Scene {
       fontSize: '19px', fill: '#fff', stroke: '#1a2a1a', strokeThickness: 3, fontStyle: 'bold',
     }).setScrollFactor(0).setDepth(100);
 
-    this.scoreText = this.add.text(W / 2, 12, '⭐ 0', {
-      fontSize: '22px', fill: '#FFE44D', stroke: '#1a1a2a', strokeThickness: 3, fontStyle: 'bold',
+    this.scoreText = this.add.text(W / 2, 10, '⭐ 100', {
+      fontSize: '26px', fill: '#00FF88', stroke: '#1a1a2a', strokeThickness: 3, fontStyle: 'bold',
     }).setOrigin(0.5, 0).setScrollFactor(0).setDepth(100);
 
     this.add.text(12, H-90, '← → walk   SPACE jump/fly', {
@@ -566,18 +566,18 @@ export default class WobblyScene extends Phaser.Scene {
     npc._bopCooldown = 2.5;
 
     this.stickman.physBody.body.setVelocityY(-280);
-    this._addScore(1);
+    this._addScore(10);
     npc.knockDown();
 
-    const pts = this.add.text(npc.physBody.x, npc.physBody.y - 50, '⭐ BOOP! +1', {
-      fontSize: '16px', fill: '#FFE44D', stroke: '#000', strokeThickness: 3, fontStyle: 'bold',
+    const pts = this.add.text(npc.physBody.x, npc.physBody.y - 50, '+10 ⭐', {
+      fontSize: '20px', fill: '#00FF88', stroke: '#000', strokeThickness: 3, fontStyle: 'bold',
     }).setOrigin(0.5).setDepth(80);
-    this.tweens.add({ targets: pts, y: pts.y - 50, alpha: 0, duration: 900, onComplete: () => pts.destroy() });
+    this.tweens.add({ targets: pts, y: pts.y - 55, alpha: 0, duration: 1000, onComplete: () => pts.destroy() });
   }
 
   _triggerCaught(npc) {
     this.catchCooldown = 2.5;
-    this._addScore(-1);
+    this._addScore(-5);
     const dir = this.stickman.x > npc.physBody.x ? 1 : -1;
     this.stickman.physBody.body.setVelocityX(dir * 420);
     this.stickman.physBody.body.setVelocityY(-210);
@@ -587,6 +587,10 @@ export default class WobblyScene extends Phaser.Scene {
     this.time.delayedCall(1600, () => npc.giveUp());
     const stars = this.add.text(this.stickman.x, this.stickman.y-50, '💫 💫 💫', { fontSize:'18px' }).setOrigin(0.5).setDepth(70);
     this.tweens.add({ targets:stars, y:stars.y-40, alpha:0, duration:900, onComplete:()=>stars.destroy() });
+    const pen = this.add.text(this.stickman.x, this.stickman.y - 80, '-5 ⭐', {
+      fontSize: '18px', fill: '#FF4444', stroke: '#000', strokeThickness: 2, fontStyle: 'bold',
+    }).setOrigin(0.5).setDepth(70);
+    this.tweens.add({ targets: pen, y: pen.y - 40, alpha: 0, duration: 900, onComplete: () => pen.destroy() });
   }
 
   // ── Per-frame checks ──────────────────────────────────────
@@ -714,15 +718,17 @@ export default class WobblyScene extends Phaser.Scene {
       fontSize: '34px', fill: '#FFE44D', stroke: '#1a1a2a', strokeThickness: 4, fontStyle: 'bold',
     }).setOrigin(0.5).setScrollFactor(0).setDepth(201);
 
-    this.add.text(W / 2, H / 2 - 30, `Final Score: ${this.score} ⭐`, {
+    const finalScore = Math.round(this.score);
+    this.add.text(W / 2, H / 2 - 30, `Final Score: ${finalScore} ⭐`, {
       fontSize: '30px', fill: '#ffffff', stroke: '#000', strokeThickness: 3, fontStyle: 'bold',
     }).setOrigin(0.5).setScrollFactor(0).setDepth(201);
 
-    const msg = this.score >= 10 ? 'Absolute legend. 🏆'
-      : this.score >= 5  ? 'Not bad, wobbly one.'
-      : this.score >= 1  ? 'At least you tried.'
-      : this.score < 0   ? 'They got you more than you got them...'
-      : 'Zero? You just ran.';
+    const msg = finalScore >= 120 ? '🏆 Unstoppable! Speed AND bops!'
+      : finalScore >= 80  ? '⚡ Great run! You bopped well.'
+      : finalScore >= 50  ? '👍 Solid. Could bop more though.'
+      : finalScore >= 20  ? '😬 Slow. The clock was hungry.'
+      : finalScore >= 0   ? '😅 Just barely made it.'
+      : '💀 The clock ate you alive.';
 
     this.add.text(W / 2, H / 2 + 30, msg, {
       fontSize: '18px', fill: '#aaddff', stroke: '#000', strokeThickness: 2,
@@ -741,7 +747,19 @@ export default class WobblyScene extends Phaser.Scene {
 
   _addScore(n) {
     this.score += n;
-    this.scoreText.setText(`⭐ ${this.score}`);
+    this._updateScoreDisplay();
+    // Brief scale pulse on event additions
+    if (n !== 0) {
+      this.tweens.add({ targets: this.scoreText, scaleX: 1.35, scaleY: 1.35, duration: 90,
+        yoyo: true, ease: 'Quad.easeOut' });
+    }
+  }
+
+  _updateScoreDisplay() {
+    const s = Math.round(this.score);
+    const col = s > 70 ? '#00FF88' : s > 40 ? '#FFE44D' : s > 15 ? '#FF9900' : '#FF4444';
+    this.scoreText.setText(`⭐ ${s}`);
+    this.scoreText.setColor(col);
   }
 
   _drawPlanetCurve() {
@@ -783,6 +801,10 @@ export default class WobblyScene extends Phaser.Scene {
     } else if (px < 50) {
       this.stickman.physBody.setPosition(WORLD_W - 80, this.stickman.physBody.y);
     }
+
+    // Score counts down 1 point per second
+    this.score -= dt;
+    this._updateScoreDisplay();
 
     this._checkGaps(dt);
     this._checkNPCGiveUp();
