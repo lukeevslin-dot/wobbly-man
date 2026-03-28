@@ -8,9 +8,9 @@ const ITEM_DB = [
   { keywords: ['magic carpet', 'flying carpet', 'carpet'], name: 'Magic Carpet', emoji: '🪄', position: 'feet', type: 'wheels', canFly: true, flySpeed: -160, speed: 100, color: 0x9900CC, description: 'A whole magic carpet! Zig zag zoom.' },
 
   // Speed / Ground
-  { keywords: ['car', 'automobile', 'vehicle'], name: 'Car', emoji: '🚗', position: 'feet', type: 'wheels', speed: 160, color: 0xFF2222, description: 'VROOM! Wheels instead of feet. Sort of.' },
+  { keywords: ['car', 'automobile', 'vehicle'], name: 'Car', emoji: '🚗', position: 'feet', type: 'wheels', subtype: 'car', speed: 160, rams: true, color: 0xFF2222, description: 'VROOM! Drives through everything! NPCs go flying!' },
   { keywords: ['wheels', 'wheel', 'tires', 'tyres'], name: 'Wheels', emoji: '⚙️', position: 'feet', type: 'wheels', speed: 100, color: 0x666666, description: 'Just... wheels. Bolted on.' },
-  { keywords: ['skateboard', 'skate board', 'skate'], name: 'Skateboard', emoji: '🛹', position: 'feet', type: 'wheels', speed: 130, color: 0x8B4513, description: 'Radical! Also extremely dangerous.' },
+  { keywords: ['skateboard', 'skate board', 'skate'], name: 'Skateboard', emoji: '🛹', position: 'feet', type: 'wheels', subtype: 'skateboard', speed: 130, color: 0x8B4513, description: 'Radical! Also extremely dangerous.' },
   { keywords: ['rollerblades', 'roller blades', 'skates', 'rollerskates', 'roller skates'], name: 'Rollerblades', emoji: '⛸️', position: 'feet', type: 'wheels', speed: 140, color: 0x0066FF, description: "Now you're zooming! And can't stop." },
   { keywords: ['motorcycle', 'motorbike', 'motocycle'], name: 'Motorcycle', emoji: '🏍️', position: 'feet', type: 'wheels', speed: 200, color: 0x222222, description: 'BRAP BRAP! Maximum speed. Minimum dignity.' },
   { keywords: ['rocket boots', 'rocket', 'boosters', 'rocket shoes'], name: 'Rocket Boots', emoji: '🔥', position: 'feet', type: 'rockets', speed: 60, jumpBoost: -100, color: 0xFF4444, description: 'Rockets on the feet! Higher jumps. Also on fire.' },
@@ -23,11 +23,11 @@ const ITEM_DB = [
   { keywords: ['trampoline', 'bouncer', 'trampoline feet'], name: 'Trampoline Feet', emoji: '🎪', position: 'feet', type: 'springs', jumpBoost: -220, color: 0xFF6600, description: 'Your feet ARE a trampoline now.' },
 
   // Water
-  { keywords: ['boat', 'ship', 'sailboat', 'canoe', 'kayak'], name: 'Boat', emoji: '⛵', position: 'feet', type: 'wheels', speed: 70, canSwim: true, color: 0x8B4513, description: 'For nautical adventures! Also walks funny on land.' },
-  { keywords: ['floaties', 'floaty', 'arm floaties', 'swim ring', 'inflatable', 'floatation'], name: 'Floaties', emoji: '🏊', position: 'back', type: 'wings', canSwim: true, speed: 30, color: 0xFF6699, description: 'Fashionable AND buoyant.' },
-  { keywords: ['surfboard', 'surf board', 'surf'], name: 'Surfboard', emoji: '🏄', position: 'feet', type: 'wheels', speed: 90, canSwim: true, color: 0xFF9900, description: 'Hang ten! Or trip over it. Probably trip.' },
-  { keywords: ['swim fins', 'fins', 'flippers'], name: 'Swim Fins', emoji: '🦈', position: 'feet', type: 'wheels', speed: 60, canSwim: true, color: 0x0088FF, description: 'Big rubbery flippers. Terrible on land. Great in water.' },
-  { keywords: ['submarine', 'sub'], name: 'Submarine', emoji: '🤿', position: 'back', type: 'jetpack', canFly: true, canSwim: true, flySpeed: -120, speed: 50, color: 0xFFD700, description: 'A whole submarine. It also works on land somehow.' },
+  { keywords: ['boat', 'ship', 'sailboat', 'canoe', 'kayak'], name: 'Boat', emoji: '⛵', position: 'feet', type: 'wheels', subtype: 'boat', speed: 70, canSwim: true, color: 0x8B4513, description: 'For nautical adventures! Also walks funny on land.' },
+  { keywords: ['floaties', 'floaty', 'arm floaties', 'swim ring', 'inflatable', 'floatation'], name: 'Floaties', emoji: '🏊', position: 'back', type: 'wings', subtype: 'floaties', canSwim: true, speed: 30, color: 0xFF6699, description: 'Fashionable AND buoyant.' },
+  { keywords: ['surfboard', 'surf board', 'surf'], name: 'Surfboard', emoji: '🏄', position: 'feet', type: 'wheels', subtype: 'boat', speed: 90, canSwim: true, color: 0xFF9900, description: 'Hang ten! Or trip over it. Probably trip.' },
+  { keywords: ['swim fins', 'fins', 'flippers'], name: 'Swim Fins', emoji: '🦈', position: 'feet', type: 'wheels', subtype: 'fins', speed: 60, canSwim: true, color: 0x0088FF, description: 'Big rubbery flippers. Terrible on land. Great in water.' },
+  { keywords: ['submarine', 'sub'], name: 'Submarine', emoji: '🤿', position: 'back', type: 'jetpack', subtype: 'submarine', canFly: true, canSwim: true, flySpeed: -120, speed: 50, color: 0xFFD700, description: 'A whole submarine. It also works on land somehow.' },
 
   // Volcano
   { keywords: ['fire suit', 'firesuit', 'heat suit', 'lava suit', 'heat shield'], name: 'Fire Suit', emoji: '🔥', position: 'back', type: 'jetpack', canFly: true, flySpeed: -160, speed: 40, color: 0xFF4500, description: 'Rated for up to 3000°C. Probably.' },
@@ -49,6 +49,18 @@ const ITEM_DB = [
   { keywords: ['vine', 'vine swing', 'liana', 'grapple', 'grappling hook'], name: 'Vine Swing', emoji: '🌿', position: 'back', type: 'wings', canFly: true, flySpeed: -155, speed: 40, color: 0x4CAF50, description: 'Swing through the jungle like a complete disaster.' },
   { keywords: ['machete', 'machette', 'sword'], name: 'Machete Legs', emoji: '🔪', position: 'feet', type: 'wheels', speed: 140, color: 0xC0C0C0, description: 'Machetes strapped to the legs. Fast AND terrifying.' },
   { keywords: ['monkey', 'monkey arms', 'monkey bars'], name: 'Monkey Arms', emoji: '🐒', position: 'back', type: 'wings', canFly: true, flySpeed: -130, speed: 60, color: 0x8B4513, description: 'Big floppy monkey arms. You swing now.' },
+
+  // New items
+  { keywords: ['hang glider', 'hangglider', 'glider'], name: 'Hang Glider', emoji: '🪂', position: 'back', type: 'wings', canFly: true, flySpeed: -135, speed: 70, color: 0xFF6600, description: 'A big colourful hang glider. Terrifying. Wonderful.' },
+  { keywords: ['parachute', 'para', 'chute'], name: 'Parachute', emoji: '🪂', position: 'back', type: 'wings', canFly: true, flySpeed: -90, speed: 20, color: 0xFF9966, description: 'Floats down very slowly. Going up? Not so much.' },
+  { keywords: ['hoverboard', 'hover board', 'hover'], name: 'Hoverboard', emoji: '🛹', position: 'feet', type: 'wheels', subtype: 'skateboard', canFly: true, flySpeed: -110, speed: 170, color: 0x00CCFF, description: 'HOVERING! Futuristic board. Unstoppable.' },
+  { keywords: ['life raft', 'liferaft', 'raft', 'inflatable raft'], name: 'Life Raft', emoji: '🛟', position: 'feet', type: 'wheels', subtype: 'boat', canSwim: true, speed: 55, color: 0xFF6600, description: 'An orange inflatable raft. Slow but it floats!' },
+  { keywords: ['water wings', 'armband', 'armbands', 'swimming aids'], name: 'Water Wings', emoji: '🏊', position: 'back', type: 'wings', subtype: 'floaties', canSwim: true, speed: 40, color: 0xFF88AA, description: 'Inflatable armbands. Yes, for adults too.' },
+  { keywords: ['seaplane', 'sea plane', 'floatplane', 'float plane'], name: 'Seaplane', emoji: '✈️', position: 'back', type: 'jetpack', subtype: 'submarine', canFly: true, canSwim: true, flySpeed: -200, speed: 120, color: 0xCCDDFF, description: 'A seaplane. Works on water AND air. Zero dignity.' },
+  { keywords: ['speedboat', 'speed boat', 'motorboat', 'motor boat'], name: 'Speedboat', emoji: '🚤', position: 'feet', type: 'wheels', subtype: 'boat', canSwim: true, speed: 180, color: 0xFFCC00, description: 'ZOOOOM across the water! Also bumpy on land.' },
+  { keywords: ['duck', 'rubber duck', 'duck boat'], name: 'Rubber Duck', emoji: '🦆', position: 'feet', type: 'wheels', subtype: 'boat', canSwim: true, speed: 50, color: 0xFFEE00, description: 'A giant rubber duck. Slow but absolutely iconic.' },
+  { keywords: ['umbrella', 'brolly', 'parasol'], name: 'Umbrella', emoji: '☂️', position: 'head', type: 'propeller', canFly: true, flySpeed: -100, speed: 30, color: 0xFF4488, description: 'Hold the umbrella and float gently! Like Mary Poppins but worse.' },
+  { keywords: ['truck', 'lorry', 'big truck', 'monster truck'], name: 'Monster Truck', emoji: '🚛', position: 'feet', type: 'wheels', subtype: 'car', speed: 190, rams: true, color: 0x226622, description: 'ENORMOUS truck. Crushes everything. Even the camera fears it.' },
 ];
 
 export class BuildSystem {

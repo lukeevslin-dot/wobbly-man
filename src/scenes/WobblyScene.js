@@ -9,15 +9,15 @@ const GROUND_Y = 440;
 const WORLD_W  = 16500;
 
 // Island zones (start x)
-const JUNGLE_X  = 3520;
+const JUNGLE_X  = 3900;
 const VOLCANO_X = 7400;
 const FROZEN_X  = 10700;
 const SPACE_X   = 13700;
 
 // Gaps between islands
 const GAPS = [
-  { x: 3000,  w: 520,  type: 'water', msg: '🌊 WATER!\nBuild a boat, surfboard, or floaties to cross!',  fx: '💦' },
-  { x: 6900,  w: 500,  type: 'lava',  msg: '🔥 LAVA!\nYou need to FLY over it! (jetpack, wings...)',      fx: '🔥' },
+  { x: 3000,  w: 900,  type: 'water', msg: '🌊 OCEAN!\nOnly a BOAT, SUBMARINE, or SWIM FINS can cross!',  fx: '💦' },
+  { x: 6900,  w: 500,  type: 'lava',  msg: '🔥 LAVA!\nYou MUST FLY over it — jetpack, wings, fire boots!', fx: '🔥' },
   { x: 10200, w: 500,  type: 'chasm', msg: '❄️ ICY CHASM!\nNeed to FLY across!',                          fx: '❄️' },
   { x: 13200, w: 500,  type: 'void',  msg: '🚀 SPACE VOID!\nNeed a rocket, jetpack, or wings!',           fx: '💫' },
 ];
@@ -29,6 +29,14 @@ const ISLANDS = {
   volcano: { label: '🌋  Volcano Valley',   banner: '🌋 VOLCANO VALLEY 🌋\nHOT HOT HOT — they\'re angry!', sky: 0x2D0A00 },
   frozen:  { label: '🧊  Frozen Peaks',     banner: '🧊 FROZEN PEAKS 🧊\nSlippy! Build ice gear!',          sky: 0xC8E6F5 },
   space:   { label: '🚀  Space Junk',       banner: '🚀 SPACE JUNK 🚀\nLow gravity. High weirdness.',       sky: 0x000011 },
+};
+
+const NPC_BOUNDS = {
+  beach:   { min: 80,             max: GAPS[0].x - 20 },
+  jungle:  { min: JUNGLE_X + 20,  max: GAPS[1].x - 20 },
+  volcano: { min: VOLCANO_X + 20, max: GAPS[2].x - 20 },
+  frozen:  { min: FROZEN_X + 20,  max: GAPS[3].x - 20 },
+  space:   { min: SPACE_X + 20,   max: WORLD_W - 80    },
 };
 
 function islandAt(x) {
@@ -70,6 +78,15 @@ export default class WobblyScene extends Phaser.Scene {
     this._inGameOver     = false;
     this.leaderboard     = null;
     this._lbText         = null;
+    this.playerName      = 'Anonymous';
+    this._gameStarted    = false;
+    this._awaitingStart  = false;
+    this._startUI        = [];
+    this._fireDrainTimer = 0;
+    this.mountains       = [];
+    this.birds           = [];
+    this.birdGfx         = null;
+    this.birdHitCooldown = 0;
   }
 
   create() {
@@ -81,6 +98,8 @@ export default class WobblyScene extends Phaser.Scene {
     this._buildScenery();
     this._buildGapVisuals(H);
     this._spawnClouds();
+    this._buildMountains(H);
+    this._spawnBirds();
 
     // ── Static ground body (full world width) ─────────────
     const gObj = this.add.rectangle(WORLD_W / 2, GROUND_Y + 50, WORLD_W, 100);
@@ -90,11 +109,12 @@ export default class WobblyScene extends Phaser.Scene {
     // ── Player ─────────────────────────────────────────────
     this.stickman = new Stickman(this, 120, GROUND_Y - 30);
     this.physics.add.collider(this.stickman.physBody, this.ground);
+    for (const m of this.mountains) this.physics.add.collider(this.stickman.physBody, m);
 
     // ── NPCs (with solid colliders against player) ─────────
     const npcDefs = [
       { xs: [350,680,1050,1400,1780,2200,2600,2900],  type: 'beach'   },
-      { xs: [3680,4100,4580,5050,5520,6000,6450],      type: 'jungle'  },
+      { xs: [4060,4480,4960,5430,5900,6380,6820],      type: 'jungle'  },
       { xs: [7600,8100,8600,9100,9600,10000],          type: 'volcano' },
       { xs: [10900,11350,11800,12250,12700],            type: 'frozen'  },
       { xs: [13900,14350,14800,15300,15750,16200],     type: 'space'   },
@@ -102,11 +122,14 @@ export default class WobblyScene extends Phaser.Scene {
     for (const { xs, type } of npcDefs) {
       for (const nx of xs) {
         const npc = new NPC(this, nx, GROUND_Y - 28, type);
+        const bounds = NPC_BOUNDS[type];
+        if (bounds) { npc.minX = bounds.min; npc.maxX = bounds.max; }
         this.physics.add.collider(npc.physBody, this.ground);
         // Solid collider between player and NPC — also handles catch/ram
         this.physics.add.collider(this.stickman.physBody, npc.physBody, () => {
           this._handlePlayerNPCCollision(npc);
         });
+        for (const m of this.mountains) this.physics.add.collider(npc.physBody, m);
         this.npcs.push(npc);
       }
     }
@@ -123,7 +146,7 @@ export default class WobblyScene extends Phaser.Scene {
 
     this._createUI();
     this._initAudio();
-    this._showMsg('Welcome to Wobbly Beach!\nType anything in the box to build it.');
+    this._showStartScreen();
   }
 
   // ── World building ───────────────────────────────────────
@@ -263,7 +286,7 @@ export default class WobblyScene extends Phaser.Scene {
     for (const px of [200,480,820,1200,1600,2050,2450,2850]) this._drawPalm(px);
 
     // Jungle trees + vines
-    for (const tx of [3600,3900,4250,4650,5050,5450,5850,6250,6550,6750]) this._drawJungleTree(tx);
+    for (const tx of [3980,4320,4700,5100,5500,5900,6300,6650,6830]) this._drawJungleTree(tx);
     const vg = this.add.graphics();
     vg.lineStyle(3, 0x4CAF50, 0.75);
     for (let vx = JUNGLE_X + 100; vx < GAPS[1].x - 100; vx += 200) {
@@ -310,7 +333,7 @@ export default class WobblyScene extends Phaser.Scene {
     }
 
     // Island signs
-    this._sign(GAPS[0].x - 20, '⚠ WATER AHEAD\nneed boat/floaties', 0xFFE082, 0x5D3A00);
+    this._sign(GAPS[0].x - 20, '⚠ OCEAN AHEAD\nNeed BOAT/FINS/SUB', 0xFFE082, 0x5D3A00);
     this._sign(JUNGLE_X + 14,  '🌿 JUNGLE JAM\nGood luck!',          0xA5D6A7, 0x1B5E20);
     this._sign(GAPS[1].x - 20, '⚠ LAVA AHEAD\nneed to FLY',         0xFF8A65, 0x6D1A00);
     this._sign(VOLCANO_X + 14, '🌋 VOLCANO VALLEY\nStay moving!',    0xFF8A65, 0x6D1A00);
@@ -326,9 +349,16 @@ export default class WobblyScene extends Phaser.Scene {
     const wg = this.add.graphics().setDepth(1);
     wg.fillStyle(0x1565C0); wg.fillRect(GAPS[0].x, GROUND_Y, GAPS[0].w, H - GROUND_Y);
     wg.fillStyle(0xFF9800, 0.6);
-    for (const [fx, fy] of [[GAPS[0].x+80,GROUND_Y+50],[GAPS[0].x+280,GROUND_Y+80],[GAPS[0].x+420,GROUND_Y+35]]) {
+    for (const [fx, fy] of [
+      [GAPS[0].x+80,GROUND_Y+50],[GAPS[0].x+230,GROUND_Y+80],[GAPS[0].x+380,GROUND_Y+40],
+      [GAPS[0].x+530,GROUND_Y+70],[GAPS[0].x+680,GROUND_Y+45],[GAPS[0].x+820,GROUND_Y+60],
+    ]) {
       wg.fillTriangle(fx, fy, fx+30, fy-8, fx+30, fy+8);
     }
+    // Whale silhouette in the deep
+    wg.fillStyle(0x0D47A1, 0.4);
+    wg.fillEllipse(GAPS[0].x + 450, GROUND_Y + 110, 160, 55);
+    wg.fillTriangle(GAPS[0].x+525, GROUND_Y+110, GAPS[0].x+560, GROUND_Y+88, GAPS[0].x+560, GROUND_Y+132);
     this.waveGfx = this.add.graphics().setDepth(2);
 
     // Lava
@@ -372,6 +402,153 @@ export default class WobblyScene extends Phaser.Scene {
         sz: 1.5 + Math.random() * 2.5,
       });
     }
+  }
+
+  _buildMountains(H) {
+    const mg = this.add.graphics().setDepth(0);
+
+    // Mountain definitions: { cx, baseW, h, col, snow }
+    const defs = [
+      // Beach mountains (brownish rocky)
+      { cx:  680, baseW: 220, h: 115, col: 0x9E7B5A, snow: 0xFFFFFF },
+      { cx: 1550, baseW: 260, h: 130, col: 0x967060, snow: 0xFFFFFF },
+      { cx: 2550, baseW: 240, h: 120, col: 0xA0825A, snow: 0xFFFFFF },
+      // Jungle mountains (mossy green)
+      { cx: JUNGLE_X + 550,  baseW: 280, h: 135, col: 0x4A6040, snow: 0x88CC66 },
+      { cx: JUNGLE_X + 1900, baseW: 300, h: 145, col: 0x3D5535, snow: 0x77BB55 },
+      // Frozen peaks (icy blue-white)
+      { cx: FROZEN_X + 650,  baseW: 300, h: 155, col: 0x8EB4D8, snow: 0xFFFFFF },
+      { cx: FROZEN_X + 2050, baseW: 320, h: 160, col: 0x9DC0E0, snow: 0xFFFFFF },
+    ];
+
+    for (const def of defs) {
+      const top = GROUND_Y - def.h;
+
+      // Visual: mountain triangle
+      mg.fillStyle(def.col);
+      mg.fillTriangle(def.cx - def.baseW, GROUND_Y, def.cx, top, def.cx + def.baseW, GROUND_Y);
+      mg.lineStyle(1.5, 0x443322, 0.45);
+      mg.lineBetween(def.cx - def.baseW * 0.5, GROUND_Y, def.cx - def.baseW * 0.1, top + def.h * 0.35);
+      mg.lineBetween(def.cx + def.baseW * 0.5, GROUND_Y, def.cx + def.baseW * 0.1, top + def.h * 0.35);
+      // Snow cap
+      const capH = def.h * 0.28;
+      mg.fillStyle(def.snow, 0.92);
+      mg.fillTriangle(def.cx - def.baseW * 0.32, top + capH * 2.2, def.cx, top - 4, def.cx + def.baseW * 0.32, top + capH * 2.2);
+
+      // Physics wall: a plain rectangle with static physics — this is the reliable approach
+      const wallW = Math.round(def.baseW * 1.6);
+      const wallH = def.h;
+      const wall  = this.add.rectangle(def.cx, GROUND_Y - wallH / 2, wallW, wallH);
+      wall.setVisible(false);
+      this.physics.add.existing(wall, true); // true = static body
+      this.mountains.push(wall);
+    }
+  }
+
+  _spawnBirds() {
+    this.birdGfx = this.add.graphics().setDepth(25);
+    const ZONE_BOUNDS = {
+      beach:   { min: 80,            max: GAPS[0].x - 60 },
+      jungle:  { min: JUNGLE_X + 50, max: GAPS[1].x - 60 },
+      volcano: { min: VOLCANO_X +50, max: GAPS[2].x - 60 },
+      frozen:  { min: FROZEN_X + 50, max: GAPS[3].x - 60 },
+      space:   { min: SPACE_X + 50,  max: WORLD_W - 80    },
+    };
+    const birdDefs = [
+      { x: 600,               y: 175, spd: 85,  zone: 'beach'   },
+      { x: 1800,              y: 210, spd: 105, zone: 'beach'   },
+      { x: 2500,              y: 155, spd: 125, zone: 'beach'   },
+      { x: JUNGLE_X + 400,   y: 190, spd: 100, zone: 'jungle'  },
+      { x: JUNGLE_X + 1600,  y: 165, spd: 120, zone: 'jungle'  },
+      { x: VOLCANO_X + 500,  y: 185, spd: 145, zone: 'volcano' },
+      { x: VOLCANO_X + 1500, y: 205, spd: 160, zone: 'volcano' },
+      { x: FROZEN_X + 600,   y: 170, spd: 80,  zone: 'frozen'  },
+      { x: FROZEN_X + 1900,  y: 195, spd: 90,  zone: 'frozen'  },
+      { x: SPACE_X + 700,    y: 200, spd: 70,  zone: 'space'   },
+      { x: SPACE_X + 1800,   y: 225, spd: 80,  zone: 'space'   },
+    ];
+    for (const def of birdDefs) {
+      const b = ZONE_BOUNDS[def.zone];
+      this.birds.push({
+        x: def.x, y: def.y, spd: def.spd,
+        dir: Math.random() < 0.5 ? 1 : -1,
+        zone: def.zone, minX: b.min, maxX: b.max,
+        wing: Math.random() * Math.PI * 2,
+      });
+    }
+  }
+
+  _updateBirds(dt) {
+    const bg = this.birdGfx;
+    bg.clear();
+    for (const bird of this.birds) {
+      bird.x += bird.spd * bird.dir * dt;
+      bird.wing += dt * 7.5;
+      if (bird.x < bird.minX) { bird.x = bird.minX; bird.dir = 1; }
+      if (bird.x > bird.maxX) { bird.x = bird.maxX; bird.dir = -1; }
+      const bx = bird.x, by = bird.y;
+      const flap = Math.sin(bird.wing) * 13;
+      const col = bird.zone === 'beach'   ? 0x445566
+                : bird.zone === 'volcano' ? 0xCC4400
+                : bird.zone === 'frozen'  ? 0xDDEEFF
+                : bird.zone === 'space'   ? 0x7799AA
+                : 0x335522; // jungle
+      bg.lineStyle(3, col, 0.95);
+      bg.beginPath();
+      bg.moveTo(bx - 24 * (bird.dir < 0 ? -1 : 1), by - flap * 0.4);
+      bg.lineTo(bx, by);
+      bg.lineTo(bx + 24 * (bird.dir < 0 ? -1 : 1), by - flap * 0.4);
+      bg.strokePath();
+      bg.fillStyle(col, 1);
+      bg.fillCircle(bx, by, 3.5);
+    }
+  }
+
+  _checkBirdCollisions() {
+    if (this.birdHitCooldown > 0) return;
+    const onGround = this.stickman.physBody.body.blocked.down;
+    if (onGround) return; // birds only hit airborne players
+    const sx = this.stickman.x, sy = this.stickman.y;
+    for (const bird of this.birds) {
+      if (Math.abs(sx - bird.x) < 38 && Math.abs(sy - bird.y) < 38) {
+        this._onBirdHit(bird);
+        return;
+      }
+    }
+  }
+
+  _onBirdHit(bird) {
+    this.birdHitCooldown = 5;
+    const lostItem = this.attachments.length > 0 ? this.attachments[0] : null;
+    this.attachments = [];
+    this.stickman.clearAttachments();
+    this._updateHUD();
+
+    // Knock player tumbling
+    this.stickman.physBody.body.setVelocityY(450);
+    this.stickman.physBody.body.setVelocityX(this.stickman.facingRight ? -200 : 200);
+    this.cameras.main.shake(350, 0.022);
+    this.cameras.main.flash(200, 255, 200, 0);
+
+    // Feather burst
+    for (let i = 0; i < 7; i++) {
+      const fx = bird.x + (Math.random() - 0.5) * 70;
+      const fy = bird.y + (Math.random() - 0.5) * 45;
+      const f = this.add.text(fx, fy, '🪶', { fontSize: '17px' }).setOrigin(0.5).setDepth(60);
+      this.tweens.add({
+        targets: f, x: fx + (Math.random() - 0.5) * 90, y: fy + 70 + Math.random() * 50,
+        alpha: 0, duration: 1300 + Math.random() * 600,
+        onComplete: () => f.destroy(),
+      });
+    }
+    const hitTxt = this.add.text(bird.x, bird.y - 25, '🐦 BIRD STRIKE!', {
+      fontSize: '20px', fill: '#FFE44D', stroke: '#222', strokeThickness: 3, fontStyle: 'bold',
+    }).setOrigin(0.5).setDepth(80);
+    this.tweens.add({ targets: hitTxt, y: hitTxt.y - 55, alpha: 0, duration: 1300, onComplete: () => hitTxt.destroy() });
+
+    this._showMsg(lostItem
+      ? `🐦 BIRD STRIKE! You lost your ${lostItem.name}!\nIt tumbled from the sky...`
+      : '🐦 BIRD STRIKE! Watch the skies!');
   }
 
   _drawPalm(x) {
@@ -453,6 +630,10 @@ export default class WobblyScene extends Phaser.Scene {
       fontSize: '12px', fill: '#aaa', stroke: '#000', strokeThickness: 2,
     }).setScrollFactor(0).setDepth(100);
 
+    this.add.text(W - 6, H - 6, 'v 2.0', {
+      fontSize: '11px', fill: '#555', stroke: '#000', strokeThickness: 1,
+    }).setOrigin(1, 1).setScrollFactor(0).setDepth(100);
+
     this.attachmentText = this.add.text(W-10, 10, 'No attachments', {
       fontSize: '13px', fill: '#fff', stroke: '#000', strokeThickness: 2, align: 'right',
     }).setOrigin(1,0).setScrollFactor(0).setDepth(100);
@@ -494,7 +675,9 @@ export default class WobblyScene extends Phaser.Scene {
   // ── Build ─────────────────────────────────────────────────
 
   _handleBuild() {
+    if (this._awaitingStart) { this._startGame(); return; }
     if (this._inGameOver) { this._handleNameSubmit(); return; }
+    if (!this._gameStarted) return;
     const raw = this.buildInputEl.value.trim();
     if (!raw) return;
     this.buildInputEl.value = '';
@@ -511,6 +694,62 @@ export default class WobblyScene extends Phaser.Scene {
     this._updateHUD();
     this._spawnBug(item);
     this._showMsg(`${item.emoji} ${item.name}!\n"${item.description}"`);
+  }
+
+  _showStartScreen() {
+    this._awaitingStart = true;
+    const W = this.scale.width, H = this.scale.height;
+
+    const overlay = this.add.rectangle(W / 2, H / 2, W, H, 0x000011, 0.75)
+      .setScrollFactor(0).setDepth(150);
+    const title = this.add.text(W / 2, H / 2 - 110, '🌍 BAD WALKER', {
+      fontSize: '36px', fill: '#FFE44D', stroke: '#1a1a2a', strokeThickness: 4, fontStyle: 'bold',
+    }).setOrigin(0.5).setScrollFactor(0).setDepth(151);
+    const sub = this.add.text(W / 2, H / 2 - 68, 'Bop NPCs. Don\'t get caught. Finish the planet.', {
+      fontSize: '16px', fill: '#ccc', stroke: '#000', strokeThickness: 2,
+    }).setOrigin(0.5).setScrollFactor(0).setDepth(151);
+
+    const lbHeader = this.add.text(W / 2, H / 2 - 32, '── HIGH SCORES ──', {
+      fontSize: '13px', fill: '#FFE44D', fontFamily: 'monospace', fontStyle: 'bold',
+    }).setOrigin(0.5).setScrollFactor(0).setDepth(151);
+    const lbRows = this.add.text(W / 2, H / 2 - 14, 'Loading…', {
+      fontSize: '13px', fill: '#aaa', fontFamily: 'monospace', align: 'center',
+    }).setOrigin(0.5, 0).setScrollFactor(0).setDepth(151);
+    this.leaderboard.getTop(5).then(rows => {
+      if (!rows?.length) { lbRows.setText('(no scores yet)'); return; }
+      lbRows.setText(rows.map((r, i) => `${i + 1}. ${r.name.substring(0, 12).padEnd(13)} ${r.score}`).join('\n'));
+    });
+
+    const prompt = this.add.text(W / 2, H - 60, '↓ Enter your name below and press START', {
+      fontSize: '14px', fill: '#88aaff', stroke: '#000', strokeThickness: 2,
+    }).setOrigin(0.5).setScrollFactor(0).setDepth(151);
+
+    this._startUI = [overlay, title, sub, lbHeader, lbRows, prompt];
+
+    this.buildInputEl.value = '';
+    this.buildInputEl.placeholder = 'Enter your name…';
+    this.buildBtnEl.textContent   = '▶ START';
+    this.buildBtnEl.style.background  = '#1a5a1a';
+    this.buildBtnEl.style.borderColor = '#0a3a0a';
+    this.buildInputEl.focus();
+  }
+
+  _startGame() {
+    this.playerName = (this.buildInputEl.value.trim() || 'Anonymous').substring(0, 20);
+    this._awaitingStart = false;
+    this._gameStarted   = true;
+
+    for (const obj of this._startUI) obj.destroy();
+    this._startUI = [];
+
+    this.buildInputEl.value       = '';
+    this.buildInputEl.placeholder = 'What to build? (boat, jetpack, fire suit, gravity boots…)';
+    this.buildBtnEl.textContent   = '⚙ BUILD!';
+    this.buildBtnEl.style.background  = '#c0392b';
+    this.buildBtnEl.style.borderColor = '#922b21';
+    this.buildInputEl.blur();
+
+    this._showMsg(`Welcome, ${this.playerName}!\nBop NPCs, don't get caught, finish the planet!`);
   }
 
   _spawnBug(item) {
@@ -560,6 +799,14 @@ export default class WobblyScene extends Phaser.Scene {
       this._onBop(npc);
       return;
     }
+    if (this._hasCarItem() && !npc.isFallen) {
+      npc.knockDown();
+      const splat = this.add.text(npc.physBody.x, npc.physBody.y - 30, '💥 BONK!', {
+        fontSize: '16px', fill: '#FF9900', stroke: '#000', strokeThickness: 2, fontStyle: 'bold',
+      }).setOrigin(0.5).setDepth(70);
+      this.tweens.add({ targets: splat, y: splat.y - 35, alpha: 0, duration: 900, onComplete: () => splat.destroy() });
+      return;
+    }
     if (!npc.isAngry && this._hasRammingItem()) {
       npc.makeAngry(this.stickman);
       this._playAngry();
@@ -571,17 +818,17 @@ export default class WobblyScene extends Phaser.Scene {
 
   _onBop(npc) {
     if (npc.isFallen || (npc._bopCooldown ?? 0) > 0) return;
-    npc._bopCooldown = 2.5;
+    npc._bopCooldown = 5;
 
     this.stickman.physBody.body.setVelocityY(-280);
-    this._addScore(2);
+    this._addScore(3);
     this._playBop();
     npc.knockDown();
 
-    const pts = this.add.text(npc.physBody.x, npc.physBody.y - 50, '+2 ⭐', {
+    const pts = this.add.text(npc.physBody.x, npc.physBody.y - 50, '+3 ⭐', {
       fontSize: '20px', fill: '#00FF88', stroke: '#000', strokeThickness: 3, fontStyle: 'bold',
     }).setOrigin(0.5).setDepth(80);
-    this.tweens.add({ targets: pts, y: pts.y - 55, alpha: 0, duration: 1000, onComplete: () => pts.destroy() });
+    this.tweens.add({ targets: pts, y: pts.y - 55, alpha: 0, duration: 1100, onComplete: () => pts.destroy() });
   }
 
   _triggerCaught(npc) {
@@ -610,11 +857,15 @@ export default class WobblyScene extends Phaser.Scene {
     for (const gap of GAPS) {
       if (px > gap.x && px < gap.x + gap.w) {
         const canCross = gap.type === 'water'
-          ? this.attachments.some(a => a.canFly || a.canSwim)
+          ? this.attachments.some(a => a.canSwim)
           : this.stickman.canFly;
         if (!canCross) {
-          const pushDir = px < gap.x + gap.w / 2 ? -1 : 1;
-          this.stickman.physBody.body.setVelocityX(pushDir * 340);
+          const atLeft = px < gap.x + gap.w / 2;
+          this.stickman.physBody.setPosition(
+            atLeft ? gap.x - 14 : gap.x + gap.w + 14,
+            this.stickman.physBody.y,
+          );
+          this.stickman.physBody.body.setVelocityX(0);
           if (this.gapWarnCooldown <= 0) {
             this._showMsg(gap.msg);
             this.gapWarnCooldown = 3.5;
@@ -724,9 +975,7 @@ export default class WobblyScene extends Phaser.Scene {
   _renderLeaderboard(rows, myName) {
     if (!this._lbText?.scene) return;
     if (!rows?.length) {
-      this._lbText.setText(this.leaderboard.enabled
-        ? '  (no scores yet — be first!)'
-        : '  (leaderboard not configured)');
+      this._lbText.setText('  (no scores yet — be first!)');
       return;
     }
     const lines = rows.map((r, i) => {
@@ -741,6 +990,7 @@ export default class WobblyScene extends Phaser.Scene {
 
   _hasRammingItem() { return this.attachments.some(a => a.type==='wheels' && (a.speed??0)>=130); }
   _hasFastEscape()  { return this.stickman.canFly || this.stickman.moveSpeed > 250; }
+  _hasCarItem()     { return this.attachments.some(a => a.rams === true); }
 
   _checkNPCProximity() {
     for (const npc of this.npcs) {
@@ -789,27 +1039,22 @@ export default class WobblyScene extends Phaser.Scene {
     }).setOrigin(0.5, 0).setScrollFactor(0).setDepth(201);
 
     // Leaderboard rows (populated async)
-    this._lbText = this.add.text(W / 2, 108, this.leaderboard.enabled ? 'Loading…' : '(configure Supabase in src/config.js)', {
+    this._lbText = this.add.text(W / 2, 108, 'Loading…', {
       fontSize: '14px', fill: '#ccc', stroke: '#000', strokeThickness: 1,
       fontFamily: 'monospace', align: 'left',
     }).setOrigin(0.5, 0).setScrollFactor(0).setDepth(201);
 
-    // Fetch existing scores immediately so they show while player types name
-    this.leaderboard.getTop(10).then(rows => this._renderLeaderboard(rows, null));
+    // Hide build UI — name was captured at game start
+    this.buildInputEl.style.display = 'none';
+    this.buildBtnEl.style.display   = 'none';
 
-    if (this.leaderboard.enabled) {
-      // Repurpose the build input for name entry
-      this.buildInputEl.value       = '';
-      this.buildInputEl.placeholder = 'Your name for the leaderboard…';
-      this.buildBtnEl.textContent   = '▶ SUBMIT';
-      this.buildBtnEl.style.background   = '#1a5a1a';
-      this.buildBtnEl.style.borderColor  = '#0a3a0a';
-      this._inGameOver = true;
-      this.buildInputEl.focus();
-    } else {
-      // No leaderboard — just show play again
+    // Auto-submit score and show leaderboard
+    this.leaderboard.submit(this.playerName, Math.round(this.score)).then(() => {
+      return this.leaderboard.getTop(10);
+    }).then(rows => {
+      this._renderLeaderboard(rows, this.playerName);
       this._showPlayAgain();
-    }
+    });
   }
 
   _addScore(n) {
@@ -848,10 +1093,35 @@ export default class WobblyScene extends Phaser.Scene {
     );
   }
 
+  _checkLavaBurn(dt) {
+    const px = this.stickman.physBody.x;
+    const onGround = this.stickman.physBody.body.blocked.down;
+    const inLava = px > GAPS[1].x && px < GAPS[1].x + GAPS[1].w;
+    if (inLava && onGround) {
+      if (!this.stickman.onFire) {
+        this.stickman.onFire = true;
+        this._showMsg('🔥 LAVA BURNS!\nFLY to cross — build wings, jetpack, or fire boots!');
+        this.cameras.main.flash(400, 255, 60, 0);
+        this.cameras.main.shake(300, 0.025);
+      }
+      // Violently eject player from lava surface
+      this.stickman.physBody.body.setVelocityY(-500);
+      // Severe score drain: -15/sec while touching lava
+      this.score -= dt * 15;
+    } else if (!inLava) {
+      this.stickman.onFire = false;
+    }
+    // Flying through lava zone still hurts a little
+    if (this.stickman.onFire && !onGround) {
+      this.score -= dt * 2;
+    }
+  }
+
   // ── Update loop ──────────────────────────────────────────
 
   update(time, delta) {
     if (this._gameEnded) return;
+    if (!this._gameStarted) return;
     const dt = delta / 1000;
 
     this.stickman?.update(time, delta, this.cursors, this.spaceKey);
@@ -874,14 +1144,18 @@ export default class WobblyScene extends Phaser.Scene {
     this._updateScoreDisplay();
 
     this._checkGaps(dt);
+    this._checkLavaBurn(dt);
     this._checkNPCGiveUp();
     this._checkNPCProximity();
     this._checkEnvironment();
     this._checkIslandTransition();
     this._updateParticles(dt);
+    this._updateBirds(dt);
+    this._checkBirdCollisions();
     this._drawPlanetCurve();
 
-    if (this.catchCooldown > 0) this.catchCooldown -= dt;
+    if (this.catchCooldown > 0)   this.catchCooldown -= dt;
+    if (this.birdHitCooldown > 0) this.birdHitCooldown -= dt;
 
     if (this.msgTimer > 0) {
       this.msgTimer -= dt;
@@ -1009,8 +1283,10 @@ export default class WobblyScene extends Phaser.Scene {
 
   shutdown() {
     this._stopMusic();
-    this._inGameOver = false;
-    this._lbText     = null;
+    this._inGameOver    = false;
+    this._awaitingStart = false;
+    this._gameStarted   = false;
+    this._lbText        = null;
     this.buildInputEl?.remove();
     this.buildBtnEl?.remove();
     this.buildInputEl = null;

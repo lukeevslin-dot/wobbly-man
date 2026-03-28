@@ -14,6 +14,8 @@ export class NPC {
     this.angryTarget = null;
     this.isFallen   = false;
     this.fallTimer  = 0;
+    this.minX       = -Infinity;
+    this.maxX       = Infinity;
 
     this.physBody = scene.add.rectangle(x, y, 18, 55);
     scene.physics.add.existing(this.physBody);
@@ -28,7 +30,7 @@ export class NPC {
   knockDown() {
     if (this.isFallen) return;
     this.isFallen    = true;
-    this.fallTimer   = 2.5;
+    this.fallTimer   = 5;
     this.isAngry     = false;
     this.angryTarget = null;
     this.speed       = this.baseSpeed;
@@ -74,6 +76,11 @@ export class NPC {
       this._draw();
       return;
     }
+
+    // Enforce island bounds — reverse at edges
+    const cx = this.physBody.x;
+    if (cx <= this.minX && this.walkDir < 0) this.walkDir = 1;
+    if (cx >= this.maxX && this.walkDir > 0) this.walkDir = -1;
 
     if (this.isAngry && this.angryTarget) {
       const dx = this.angryTarget.x - this.physBody.x;
@@ -197,6 +204,18 @@ export class NPC {
     const fd = this.walkDir > 0 ? 1 : -1;
     g.lineBetween(x - 7 + swL - 5, y + 26, x - 7 + swL + 5 * fd, y + 26);
     g.lineBetween(x + 7 + swR - 5, y + 26, x + 7 + swR + 5 * fd, y + 26);
+
+    // Volcano NPCs are on fire!
+    if (this.islandType === 'volcano') {
+      const fh = 14 + Math.sin(t * 12) * 5;
+      const fh2 = 10 + Math.sin(t * 9 + 1) * 4;
+      g.fillStyle(0xFF6600, 0.85);
+      g.fillTriangle(x - 8, y - 5, x, y - 5, x - 4, y - 5 - fh);
+      g.fillTriangle(x + 2, y - 5, x + 10, y - 5, x + 6, y - 5 - fh2);
+      g.fillStyle(0xFFCC00, 0.7);
+      g.fillTriangle(x - 6, y - 5, x, y - 5, x - 3, y - 5 - fh * 0.6);
+      g.fillTriangle(x + 3, y - 5, x + 9, y - 5, x + 6, y - 5 - fh2 * 0.6);
+    }
   }
 
   _drawPenguin(g, x, y, sp, t) {

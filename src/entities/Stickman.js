@@ -13,6 +13,9 @@ export class Stickman {
     this.facingRight = true;
     this.isMoving = false;
 
+    // State
+    this.onFire = false;
+
     // Stats
     this.moveSpeed = 110;
     this.jumpVelocity = -420;
@@ -242,6 +245,18 @@ export class Stickman {
       g.lineBetween(-14, 30, -2, 30);
       g.lineBetween(  2, 30, 14, 30);
     }
+
+    // On fire!
+    if (this.onFire) {
+      const fh = 18 + Math.sin(t * 14) * 6;
+      const fh2 = 14 + Math.sin(t * 10 + 2) * 5;
+      g.fillStyle(0xFF4500, 0.9);
+      g.fillTriangle(-10, 30, 2, 30, -4, 30 - fh);
+      g.fillTriangle(2, 30, 14, 30, 8, 30 - fh2);
+      g.fillStyle(0xFFCC00, 0.75);
+      g.fillTriangle(-8, 30, 0, 30, -4, 30 - fh * 0.65);
+      g.fillTriangle(3, 30, 12, 30, 8, 30 - fh2 * 0.65);
+    }
   }
 
   _drawAttachments(wx, wy) {
@@ -255,6 +270,99 @@ export class Stickman {
         const fy = wy + 30; // bottom of physics body = foot level
 
         if (att.type === 'wheels') {
+          if (att.subtype === 'boat') {
+            // ── Boat hull ─────────────────────────────────────
+            const hw = 50, hh = 18;
+            const hx = wx - hw / 2, hy = fy - hh + 4;
+            // Hull body
+            ag.fillStyle(att.color ?? 0x8B4513, 1);
+            ag.fillRoundedRect(hx, hy, hw, hh, { tl: 2, tr: 2, bl: 10, br: 10 });
+            ag.lineStyle(2, 0x4A2000);
+            ag.strokeRoundedRect(hx, hy, hw, hh, { tl: 2, tr: 2, bl: 10, br: 10 });
+            // Deck stripe
+            ag.lineStyle(3, 0xFFFFFF, 0.6);
+            ag.lineBetween(hx + 5, hy + 5, hx + hw - 5, hy + 5);
+            // Bow + stern curves
+            ag.fillStyle(att.color ?? 0x8B4513, 0.6);
+            ag.fillTriangle(hx - 6, fy, hx + 4, hy, hx + 12, fy);
+            ag.fillTriangle(hx + hw - 12, fy, hx + hw - 4, hy, hx + hw + 6, fy);
+            // Wake lines
+            ag.lineStyle(1.5, 0x99CCFF, 0.5);
+            ag.lineBetween(hx - 8, fy + 3, hx + hw + 8, fy + 3);
+            ag.lineBetween(hx - 4, fy + 7, hx + hw + 4, fy + 7);
+
+          } else if (att.subtype === 'fins') {
+            // ── Swim fins (flippers) ─────────────────────────
+            const fd = this.facingRight ? 1 : -1;
+            const flipL = [wx - 16, wx - 8];
+            const flipR = [wx + 8,  wx + 16];
+            for (const [fx1, fx2] of [flipL, flipR]) {
+              ag.fillStyle(att.color ?? 0x0088FF, 0.9);
+              // Long flat flipper blade
+              ag.fillTriangle(fx1, fy, fx2, fy, (fx1 + fx2) / 2 + fd * 26, fy + 5);
+              ag.fillRect(fx1, fy - 8, fx2 - fx1, 10);
+              ag.lineStyle(1.5, 0x005599);
+              ag.strokeTriangle(fx1, fy, fx2, fy, (fx1 + fx2) / 2 + fd * 26, fy + 5);
+              ag.strokeRect(fx1, fy - 8, fx2 - fx1, 10);
+              // Strap
+              ag.lineStyle(2, 0x003388, 0.8);
+              ag.lineBetween(fx1 + 2, fy - 4, fx2 - 2, fy - 4);
+            }
+
+          } else if (att.subtype === 'car') {
+            // ── Car body ─────────────────────────────────────
+            const cw = 54, ch = 22;
+            const bx = wx - cw / 2, by = fy - ch - 8;
+            // Body
+            ag.fillStyle(att.color ?? 0xFF2222, 1);
+            ag.fillRoundedRect(bx, by, cw, ch, 5);
+            ag.lineStyle(2, 0x882200);
+            ag.strokeRoundedRect(bx, by, cw, ch, 5);
+            // Cabin / roof
+            ag.fillStyle(att.color ?? 0xFF2222, 1);
+            ag.fillRoundedRect(bx + 8, by - 14, cw - 16, 16, 4);
+            ag.lineStyle(1.5, 0x882200);
+            ag.strokeRoundedRect(bx + 8, by - 14, cw - 16, 16, 4);
+            // Windows
+            ag.fillStyle(0x99DDFF, 0.8);
+            ag.fillRoundedRect(bx + 10, by - 12, 14, 12, 2);
+            ag.fillRoundedRect(bx + 28, by - 12, 14, 12, 2);
+            // Wheels
+            for (const wx2 of [bx + 8, bx + cw - 12]) {
+              ag.fillStyle(0x222222, 1);
+              ag.fillCircle(wx2 + 2, fy, 9);
+              ag.lineStyle(2, 0x444444);
+              ag.strokeCircle(wx2 + 2, fy, 9);
+              ag.lineStyle(2, 0x888888);
+              ag.lineBetween(wx2 + 2, fy - 6, wx2 + 2, fy + 6);
+              ag.lineBetween(wx2 - 4, fy, wx2 + 8, fy);
+            }
+          } else if (att.subtype === 'skateboard') {
+            // ── Skateboard ───────────────────────────────────
+            const bw = 52, bh = 7;
+            // Deck
+            ag.fillStyle(att.color ?? 0x8B4513, 1);
+            ag.fillRoundedRect(wx - bw / 2, fy - bh, bw, bh, 3);
+            ag.lineStyle(1.5, 0x4A2000);
+            ag.strokeRoundedRect(wx - bw / 2, fy - bh, bw, bh, 3);
+            // Grip tape pattern
+            ag.lineStyle(1, 0x000000, 0.35);
+            for (let tx = wx - bw / 2 + 5; tx < wx + bw / 2 - 3; tx += 7) {
+              ag.lineBetween(tx, fy - bh + 1, tx + 3, fy - 1);
+            }
+            // Trucks (metal bars)
+            ag.lineStyle(3, 0x999999);
+            ag.lineBetween(wx - bw / 2 + 6, fy, wx - bw / 2 + 18, fy);
+            ag.lineBetween(wx + bw / 2 - 18, fy, wx + bw / 2 - 6, fy);
+            // 4 wheels
+            for (const wx2 of [wx - bw / 2 + 6, wx - bw / 2 + 16, wx + bw / 2 - 18, wx + bw / 2 - 8]) {
+              ag.fillStyle(0x333333, 1);
+              ag.fillCircle(wx2, fy, 5);
+              ag.lineStyle(1.5, 0x666666);
+              ag.strokeCircle(wx2, fy, 5);
+            }
+          } else {
+            // ── Generic wheels ───────────────────────────────
           ag.fillStyle(att.color ?? 0xCC0000, 0.5);
           ag.fillCircle(wx - 10, fy, 10);
           ag.fillCircle(wx + 10, fy, 10);
@@ -266,6 +374,7 @@ export class Stickman {
           ag.lineBetween(wx - 20, fy,      wx,      fy);
           ag.lineBetween(wx + 10, fy - 10, wx + 10, fy + 10);
           ag.lineBetween(wx,      fy,      wx + 20, fy);
+          }
 
         } else if (att.type === 'rockets') {
           ag.fillStyle(att.color ?? 0xFF4444);
@@ -289,7 +398,54 @@ export class Stickman {
         }
 
       } else if (att.position === 'back') {
-        if (att.type === 'jetpack') {
+        if (att.subtype === 'floaties') {
+          // ── Inflatable arm floaties ─────────────────────────
+          const col = att.color ?? 0xFF6699;
+          // Left armband
+          ag.fillStyle(col, 0.92);
+          ag.fillEllipse(wx - 26, wy - 10, 20, 14);
+          ag.lineStyle(2, 0xCC3366);
+          ag.strokeEllipse(wx - 26, wy - 10, 20, 14);
+          // Right armband
+          ag.fillStyle(col, 0.92);
+          ag.fillEllipse(wx + 26, wy - 10, 20, 14);
+          ag.lineStyle(2, 0xCC3366);
+          ag.strokeEllipse(wx + 26, wy - 10, 20, 14);
+          // Shine dots
+          ag.fillStyle(0xFFFFFF, 0.5);
+          ag.fillCircle(wx - 29, wy - 13, 3);
+          ag.fillCircle(wx + 23, wy - 13, 3);
+
+        } else if (att.subtype === 'submarine') {
+          // ── Submarine ───────────────────────────────────────
+          const col = att.color ?? 0xFFD700;
+          const sx = wx + 6, sy = wy - 5;
+          // Main hull (horizontal ellipse)
+          ag.fillStyle(col, 1);
+          ag.fillEllipse(sx + 14, sy, 52, 22);
+          ag.lineStyle(2, 0x886600);
+          ag.strokeEllipse(sx + 14, sy, 52, 22);
+          // Conning tower
+          ag.fillStyle(col, 1);
+          ag.fillRect(sx + 8, sy - 20, 14, 12);
+          ag.lineStyle(1.5, 0x886600);
+          ag.strokeRect(sx + 8, sy - 20, 14, 12);
+          // Periscope
+          ag.lineStyle(3, 0x886600);
+          ag.lineBetween(sx + 12, sy - 20, sx + 12, sy - 32);
+          ag.lineBetween(sx + 12, sy - 32, sx + 18, sy - 32);
+          // Porthole
+          ag.fillStyle(0x99DDFF, 0.8);
+          ag.fillCircle(sx + 22, sy, 5);
+          ag.lineStyle(1.5, 0x886600);
+          ag.strokeCircle(sx + 22, sy, 5);
+          // Propeller
+          const pa = this.wobbleTime * 8;
+          ag.lineStyle(3, 0x775500);
+          ag.lineBetween(sx + 39, sy, sx + 39 + Math.cos(pa) * 7, sy + Math.sin(pa) * 7);
+          ag.lineBetween(sx + 39, sy, sx + 39 + Math.cos(pa + Math.PI) * 7, sy + Math.sin(pa + Math.PI) * 7);
+
+        } else if (att.type === 'jetpack') {
           ag.fillStyle(att.color ?? 0x666666);
           ag.fillRect(wx + 8, wy - 20, 17, 30);
           ag.lineStyle(2, 0x444444);
