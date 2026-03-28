@@ -117,6 +117,7 @@ export default class WobblyScene extends Phaser.Scene {
     this.planetCurveGfx = this.add.graphics().setScrollFactor(0).setDepth(90);
 
     this._createUI();
+    this._initAudio();
     this._showMsg('Welcome to Wobbly Beach!\nType anything in the box to build it.');
   }
 
@@ -555,6 +556,7 @@ export default class WobblyScene extends Phaser.Scene {
     }
     if (!npc.isAngry && this._hasRammingItem()) {
       npc.makeAngry(this.stickman);
+      this._playAngry();
       this._showMsg('😤 They\'re FURIOUS!\nBuild something to escape!');
     } else if (npc.isAngry && this.catchCooldown <= 0) {
       this._triggerCaught(npc);
@@ -566,10 +568,11 @@ export default class WobblyScene extends Phaser.Scene {
     npc._bopCooldown = 2.5;
 
     this.stickman.physBody.body.setVelocityY(-280);
-    this._addScore(4);
+    this._addScore(2);
+    this._playBop();
     npc.knockDown();
 
-    const pts = this.add.text(npc.physBody.x, npc.physBody.y - 50, '+4 ⭐', {
+    const pts = this.add.text(npc.physBody.x, npc.physBody.y - 50, '+2 ⭐', {
       fontSize: '20px', fill: '#00FF88', stroke: '#000', strokeThickness: 3, fontStyle: 'bold',
     }).setOrigin(0.5).setDepth(80);
     this.tweens.add({ targets: pts, y: pts.y - 55, alpha: 0, duration: 1000, onComplete: () => pts.destroy() });
@@ -698,13 +701,14 @@ export default class WobblyScene extends Phaser.Scene {
       if (npc.isFallen || npc.isAngry) continue;
       const dx = Math.abs(this.stickman.x - npc.physBody.x);
       const dy = Math.abs(this.stickman.y - npc.physBody.y);
-      if (dx < 170 && dy < 80) npc.makeAngry(this.stickman);
+      if (dx < 170 && dy < 80) { npc.makeAngry(this.stickman); this._playAngry(); }
     }
   }
 
   _gameOver() {
     if (this._gameEnded) return;
     this._gameEnded = true;
+    this._stopMusic();
 
     this.stickman.physBody.body.setVelocityX(0);
     this.cameras.main.shake(400, 0.012);
@@ -723,10 +727,10 @@ export default class WobblyScene extends Phaser.Scene {
       fontSize: '30px', fill: '#ffffff', stroke: '#000', strokeThickness: 3, fontStyle: 'bold',
     }).setOrigin(0.5).setScrollFactor(0).setDepth(201);
 
-    const msg = finalScore >= 80 ? '🏆 Unstoppable! Fast AND boppy.'
-      : finalScore >= 60  ? '⚡ Great run! Nice balance.'
-      : finalScore >= 40  ? '👍 Solid. Keep moving next time.'
-      : finalScore >= 20  ? '😬 Slow. The clock was hungry.'
+    const msg = finalScore >= 70 ? '🏆 Unstoppable! Fast AND boppy.'
+      : finalScore >= 50  ? '⚡ Great run! Nice balance.'
+      : finalScore >= 30  ? '👍 Solid. Keep moving next time.'
+      : finalScore >= 10  ? '😬 Slow. The clock was hungry.'
       : finalScore >= 0   ? '😅 Just barely made it.'
       : '💀 The clock ate you alive.';
 
@@ -827,7 +831,121 @@ export default class WobblyScene extends Phaser.Scene {
     }
   }
 
+  // ── Audio ─────────────────────────────────────────────────
+
+  _initAudio() {
+    try {
+      this._ac = new (window.AudioContext || window.webkitAudioContext)();
+    } catch (e) { return; }
+    this._musicStopped  = false;
+    this._musicTimeout  = null;
+    this._musicStarted  = false;
+    // Browsers require a user gesture before audio plays
+    const unlock = () => {
+      if (this._musicStarted) return;
+      this._musicStarted = true;
+      const resume = () => this._startMusic();
+      this._ac.state === 'suspended' ? this._ac.resume().then(resume) : resume();
+    };
+    this.input.keyboard.on('keydown', unlock);
+    this.input.on('pointerdown', unlock);
+  }
+
+  _startMusic() {
+    // Simple 16-note melody: G A C E  A G E C  B D F# A  G E D C
+    const melody = [392, 440, 523, 659,  440, 392, 330, 262,
+                    494, 587, 740, 880,  784, 659, 587, 523];
+    let step = 0;
+    const beatMs = 380; // ~158 BPM
+    const tick = () => {
+      if (this._musicStopped) return;
+      this._playMusicNote(melody[step % melody.length], beatMs / 1000 * 0.72);
+      // Add a quiet bass pulse on beat 1 & 3 of each 4-beat group
+      if (step % 4 === 0 || step % 4 === 2) {
+        this._playMusicBass(melody[step % melody.length] / 2, beatMs / 1000 * 0.5);
+      }
+      step++;
+      this._musicTimeout = setTimeout(tick, beatMs);
+    };
+    tick();
+  }
+
+  _stopMusic() {
+    this._musicStopped = true;
+    if (this._musicTimeout) { clearTimeout(this._musicTimeout); this._musicTimeout = null; }
+  }
+
+  _playMusicNote(freq, dur) {
+    try {
+      const ctx = this._ac;
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain); gain.connect(ctx.destination);
+      osc.type = 'triangle';
+      osc.frequency.value = freq;
+      gain.gain.setValueAtTime(0.06, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + dur);
+      osc.start(ctx.currentTime);
+      osc.stop(ctx.currentTime + dur);
+    } catch (e) {}
+  }
+
+  _playMusicBass(freq, dur) {
+    try {
+      const ctx = this._ac;
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain); gain.connect(ctx.destination);
+      osc.type = 'sine';
+      osc.frequency.value = freq;
+      gain.gain.setValueAtTime(0.05, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + dur);
+      osc.start(ctx.currentTime);
+      osc.stop(ctx.currentTime + dur);
+    } catch (e) {}
+  }
+
+  _playBop() {
+    try {
+      const ctx = this._ac;
+      if (!ctx) return;
+      // Quick square-wave "boing": starts high, swoops down
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain); gain.connect(ctx.destination);
+      osc.type = 'square';
+      osc.frequency.setValueAtTime(520, ctx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(120, ctx.currentTime + 0.18);
+      gain.gain.setValueAtTime(0.22, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.18);
+      osc.start(ctx.currentTime);
+      osc.stop(ctx.currentTime + 0.2);
+    } catch (e) {}
+  }
+
+  _playAngry() {
+    try {
+      const ctx = this._ac;
+      if (!ctx) return;
+      // Two short sawtooth buzzes rising in pitch
+      for (let i = 0; i < 2; i++) {
+        const t = ctx.currentTime + i * 0.13;
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.connect(gain); gain.connect(ctx.destination);
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(180 + i * 60, t);
+        osc.frequency.linearRampToValueAtTime(360 + i * 60, t + 0.09);
+        gain.gain.setValueAtTime(0.14, t);
+        gain.gain.exponentialRampToValueAtTime(0.001, t + 0.1);
+        osc.start(t);
+        osc.stop(t + 0.11);
+      }
+    } catch (e) {}
+  }
+
   shutdown() {
+    this._stopMusic();
     this.buildInputEl?.remove();
     this.buildBtnEl?.remove();
     this.buildInputEl = null;
