@@ -566,10 +566,10 @@ export default class WobblyScene extends Phaser.Scene {
     npc._bopCooldown = 2.5;
 
     this.stickman.physBody.body.setVelocityY(-280);
-    this._addScore(10);
+    this._addScore(4);
     npc.knockDown();
 
-    const pts = this.add.text(npc.physBody.x, npc.physBody.y - 50, '+10 ⭐', {
+    const pts = this.add.text(npc.physBody.x, npc.physBody.y - 50, '+4 ⭐', {
       fontSize: '20px', fill: '#00FF88', stroke: '#000', strokeThickness: 3, fontStyle: 'bold',
     }).setOrigin(0.5).setDepth(80);
     this.tweens.add({ targets: pts, y: pts.y - 55, alpha: 0, duration: 1000, onComplete: () => pts.destroy() });
@@ -723,9 +723,9 @@ export default class WobblyScene extends Phaser.Scene {
       fontSize: '30px', fill: '#ffffff', stroke: '#000', strokeThickness: 3, fontStyle: 'bold',
     }).setOrigin(0.5).setScrollFactor(0).setDepth(201);
 
-    const msg = finalScore >= 120 ? '🏆 Unstoppable! Speed AND bops!'
-      : finalScore >= 80  ? '⚡ Great run! You bopped well.'
-      : finalScore >= 50  ? '👍 Solid. Could bop more though.'
+    const msg = finalScore >= 80 ? '🏆 Unstoppable! Fast AND boppy.'
+      : finalScore >= 60  ? '⚡ Great run! Nice balance.'
+      : finalScore >= 40  ? '👍 Solid. Keep moving next time.'
       : finalScore >= 20  ? '😬 Slow. The clock was hungry.'
       : finalScore >= 0   ? '😅 Just barely made it.'
       : '💀 The clock ate you alive.';
