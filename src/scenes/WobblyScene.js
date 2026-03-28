@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import { Stickman } from '../entities/Stickman.js';
 import { NPC } from '../entities/NPC.js';
 import { BuildSystem } from '../systems/BuildSystem.js';
+import { Leaderboard } from '../services/Leaderboard.js';
 
 // ── World layout ──────────────────────────────────────────────────────────────
 const GROUND_Y = 440;
@@ -53,7 +54,7 @@ export default class WobblyScene extends Phaser.Scene {
     this.scoreText       = null;
     this.msgText         = null;
     this.msgTimer        = 0;
-    this.score           = 100;
+    this.score           = 125;
     this.clouds          = [];
     this.snowflakes      = [];
     this.currentIsland   = 'beach';
@@ -66,6 +67,9 @@ export default class WobblyScene extends Phaser.Scene {
     this.embers          = [];
     this.planetCurveGfx  = null;
     this._gameEnded      = false;
+    this._inGameOver     = false;
+    this.leaderboard     = null;
+    this._lbText         = null;
   }
 
   create() {
@@ -115,6 +119,7 @@ export default class WobblyScene extends Phaser.Scene {
     this.spaceKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
 
     this.planetCurveGfx = this.add.graphics().setScrollFactor(0).setDepth(90);
+    this.leaderboard    = new Leaderboard();
 
     this._createUI();
     this._initAudio();
@@ -440,7 +445,7 @@ export default class WobblyScene extends Phaser.Scene {
       fontSize: '19px', fill: '#fff', stroke: '#1a2a1a', strokeThickness: 3, fontStyle: 'bold',
     }).setScrollFactor(0).setDepth(100);
 
-    this.scoreText = this.add.text(W / 2, 10, '⭐ 100', {
+    this.scoreText = this.add.text(W / 2, 10, '⭐ 125', {
       fontSize: '26px', fill: '#00FF88', stroke: '#1a1a2a', strokeThickness: 3, fontStyle: 'bold',
     }).setOrigin(0.5, 0).setScrollFactor(0).setDepth(100);
 
@@ -489,6 +494,7 @@ export default class WobblyScene extends Phaser.Scene {
   // ── Build ─────────────────────────────────────────────────
 
   _handleBuild() {
+    if (this._inGameOver) { this._handleNameSubmit(); return; }
     const raw = this.buildInputEl.value.trim();
     if (!raw) return;
     this.buildInputEl.value = '';
@@ -693,6 +699,46 @@ export default class WobblyScene extends Phaser.Scene {
 
   // ── Helpers ──────────────────────────────────────────────
 
+  async _handleNameSubmit() {
+    const name = (this.buildInputEl.value.trim() || 'Anonymous').substring(0, 20);
+    this._inGameOver = false;
+    this.buildInputEl.style.display = 'none';
+    this.buildBtnEl.style.display   = 'none';
+    if (this._lbText) this._lbText.setText('Submitting…');
+    await this.leaderboard.submit(name, Math.round(this.score));
+    const rows = await this.leaderboard.getTop(10);
+    this._renderLeaderboard(rows, name);
+    this._showPlayAgain();
+  }
+
+  _showPlayAgain() {
+    const W = this.scale.width, H = this.scale.height;
+    this.add.text(W / 2, H - 18, 'SPACE  to play again', {
+      fontSize: '15px', fill: '#777', stroke: '#000', strokeThickness: 2,
+    }).setOrigin(0.5, 1).setScrollFactor(0).setDepth(201);
+    this.time.delayedCall(500, () => {
+      this.input.keyboard.once('keydown-SPACE', () => this.scene.restart());
+    });
+  }
+
+  _renderLeaderboard(rows, myName) {
+    if (!this._lbText?.scene) return;
+    if (!rows?.length) {
+      this._lbText.setText(this.leaderboard.enabled
+        ? '  (no scores yet — be first!)'
+        : '  (leaderboard not configured)');
+      return;
+    }
+    const lines = rows.map((r, i) => {
+      const rank  = `${i + 1}.`.padEnd(3);
+      const name  = r.name.substring(0, 15).padEnd(16);
+      const score = String(r.score).padStart(4);
+      const you   = r.name === myName ? ' ◄' : '';
+      return `${rank} ${name} ${score}${you}`;
+    });
+    this._lbText.setText(lines.join('\n'));
+  }
+
   _hasRammingItem() { return this.attachments.some(a => a.type==='wheels' && (a.speed??0)>=130); }
   _hasFastEscape()  { return this.stickman.canFly || this.stickman.moveSpeed > 250; }
 
@@ -714,18 +760,7 @@ export default class WobblyScene extends Phaser.Scene {
     this.cameras.main.shake(400, 0.012);
 
     const W = this.scale.width, H = this.scale.height;
-
-    this.add.rectangle(W / 2, H / 2, W, H, 0x000011, 0.82)
-      .setScrollFactor(0).setDepth(200);
-
-    this.add.text(W / 2, H / 2 - 90, '🌍 PLANET COMPLETE!', {
-      fontSize: '34px', fill: '#FFE44D', stroke: '#1a1a2a', strokeThickness: 4, fontStyle: 'bold',
-    }).setOrigin(0.5).setScrollFactor(0).setDepth(201);
-
     const finalScore = Math.round(this.score);
-    this.add.text(W / 2, H / 2 - 30, `Final Score: ${finalScore} ⭐`, {
-      fontSize: '30px', fill: '#ffffff', stroke: '#000', strokeThickness: 3, fontStyle: 'bold',
-    }).setOrigin(0.5).setScrollFactor(0).setDepth(201);
 
     const msg = finalScore >= 70 ? '🏆 Unstoppable! Fast AND boppy.'
       : finalScore >= 50  ? '⚡ Great run! Nice balance.'
@@ -734,19 +769,47 @@ export default class WobblyScene extends Phaser.Scene {
       : finalScore >= 0   ? '😅 Just barely made it.'
       : '💀 The clock ate you alive.';
 
-    this.add.text(W / 2, H / 2 + 30, msg, {
-      fontSize: '18px', fill: '#aaddff', stroke: '#000', strokeThickness: 2,
-    }).setOrigin(0.5).setScrollFactor(0).setDepth(201);
+    // Overlay
+    this.add.rectangle(W / 2, H / 2, W, H, 0x000011, 0.92)
+      .setScrollFactor(0).setDepth(200);
 
-    this.add.text(W / 2, H / 2 + 80, 'Press SPACE to play again', {
-      fontSize: '16px', fill: '#888', stroke: '#000', strokeThickness: 2,
-    }).setOrigin(0.5).setScrollFactor(0).setDepth(201);
+    // Title + score
+    this.add.text(W / 2, 16, '🌍 PLANET COMPLETE!', {
+      fontSize: '26px', fill: '#FFE44D', stroke: '#1a1a2a', strokeThickness: 4, fontStyle: 'bold',
+    }).setOrigin(0.5, 0).setScrollFactor(0).setDepth(201);
 
-    this.time.delayedCall(600, () => {
-      this.input.keyboard.once('keydown-SPACE', () => {
-        this.scene.restart();
-      });
-    });
+    this.add.text(W / 2, 52, `${finalScore} ⭐    ${msg}`, {
+      fontSize: '17px', fill: '#fff', stroke: '#000', strokeThickness: 2, fontStyle: 'bold',
+    }).setOrigin(0.5, 0).setScrollFactor(0).setDepth(201);
+
+    // Leaderboard header
+    this.add.text(W / 2, 86, '─── LEADERBOARD ───', {
+      fontSize: '14px', fill: '#FFE44D', stroke: '#000', strokeThickness: 2,
+      fontFamily: 'monospace', fontStyle: 'bold',
+    }).setOrigin(0.5, 0).setScrollFactor(0).setDepth(201);
+
+    // Leaderboard rows (populated async)
+    this._lbText = this.add.text(W / 2, 108, this.leaderboard.enabled ? 'Loading…' : '(configure Supabase in src/config.js)', {
+      fontSize: '14px', fill: '#ccc', stroke: '#000', strokeThickness: 1,
+      fontFamily: 'monospace', align: 'left',
+    }).setOrigin(0.5, 0).setScrollFactor(0).setDepth(201);
+
+    // Fetch existing scores immediately so they show while player types name
+    this.leaderboard.getTop(10).then(rows => this._renderLeaderboard(rows, null));
+
+    if (this.leaderboard.enabled) {
+      // Repurpose the build input for name entry
+      this.buildInputEl.value       = '';
+      this.buildInputEl.placeholder = 'Your name for the leaderboard…';
+      this.buildBtnEl.textContent   = '▶ SUBMIT';
+      this.buildBtnEl.style.background   = '#1a5a1a';
+      this.buildBtnEl.style.borderColor  = '#0a3a0a';
+      this._inGameOver = true;
+      this.buildInputEl.focus();
+    } else {
+      // No leaderboard — just show play again
+      this._showPlayAgain();
+    }
   }
 
   _addScore(n) {
@@ -946,6 +1009,8 @@ export default class WobblyScene extends Phaser.Scene {
 
   shutdown() {
     this._stopMusic();
+    this._inGameOver = false;
+    this._lbText     = null;
     this.buildInputEl?.remove();
     this.buildBtnEl?.remove();
     this.buildInputEl = null;
