@@ -83,10 +83,18 @@ export default class WobblyScene extends Phaser.Scene {
     this._awaitingStart  = false;
     this._startUI        = [];
     this._fireDrainTimer = 0;
-    this.mountains       = [];
-    this.birds           = [];
-    this.birdGfx         = null;
-    this.birdHitCooldown = 0;
+    this.mountains          = [];
+    this.birds              = [];
+    this.birdGfx            = null;
+    this.birdHitCooldown    = 0;
+    // Touch controls
+    this._touchLeft         = false;
+    this._touchRight        = false;
+    this._touchJump         = false;
+    this._touchJumpJustDown = false;
+    this._touchBtnLeft      = null;
+    this._touchBtnRight     = null;
+    this._touchBtnJump      = null;
   }
 
   create() {
@@ -108,11 +116,18 @@ export default class WobblyScene extends Phaser.Scene {
     this.birdHitCooldown = 0;
     this.msgTimer        = 0;
     this.currentIsland   = 'beach';
-    this._fireDrainTimer = 0;
+    this._fireDrainTimer    = 0;
+    this._touchLeft         = false;
+    this._touchRight        = false;
+    this._touchJump         = false;
+    this._touchJumpJustDown = false;
 
     // Remove leftover DOM elements from previous run
-    if (this.buildInputEl?.parentNode) { this.buildInputEl.remove(); this.buildInputEl = null; }
-    if (this.buildBtnEl?.parentNode)   { this.buildBtnEl.remove();   this.buildBtnEl   = null; }
+    if (this.buildInputEl?.parentNode)  { this.buildInputEl.remove();  this.buildInputEl  = null; }
+    if (this.buildBtnEl?.parentNode)    { this.buildBtnEl.remove();    this.buildBtnEl    = null; }
+    if (this._touchBtnLeft?.parentNode) { this._touchBtnLeft.remove(); this._touchBtnLeft = null; }
+    if (this._touchBtnRight?.parentNode){ this._touchBtnRight.remove();this._touchBtnRight= null; }
+    if (this._touchBtnJump?.parentNode) { this._touchBtnJump.remove(); this._touchBtnJump = null; }
 
     const H = this.scale.height;
     this.physics.world.setBounds(0, 0, WORLD_W, H * 2);
@@ -654,7 +669,7 @@ export default class WobblyScene extends Phaser.Scene {
       fontSize: '12px', fill: '#aaa', stroke: '#000', strokeThickness: 2,
     }).setScrollFactor(0).setDepth(100);
 
-    this.add.text(W - 6, H - 6, 'v 2.0', {
+    this.add.text(W - 6, H - 6, 'V 3.0', {
       fontSize: '11px', fill: '#555', stroke: '#000', strokeThickness: 1,
     }).setOrigin(1, 1).setScrollFactor(0).setDepth(100);
 
@@ -669,13 +684,18 @@ export default class WobblyScene extends Phaser.Scene {
 
     this.buildInputEl = document.createElement('input');
     this.buildInputEl.type = 'text';
-    this.buildInputEl.placeholder = 'What to build? (boat, jetpack, fire suit, gravity boots...)';
+    this.buildInputEl.placeholder = 'What to build? (boat, jetpack, wings...)';
+    // autocomplete/autocorrect off + 16px font stops iOS from auto-zooming on focus
+    this.buildInputEl.setAttribute('autocomplete', 'off');
+    this.buildInputEl.setAttribute('autocorrect', 'off');
+    this.buildInputEl.setAttribute('autocapitalize', 'off');
+    this.buildInputEl.setAttribute('spellcheck', 'false');
     Object.assign(this.buildInputEl.style, {
       position:'fixed', left:'50%', transform:'translateX(-50%)',
-      bottom:'11px', width:'400px', height:'34px',
+      bottom:'11px', width:'min(400px, 56vw)', height:'38px',
       background:'rgba(10,10,30,0.92)', border:'2px solid #4a90e2',
       borderRadius:'6px', color:'#fff', padding:'0 10px',
-      fontSize:'14px', outline:'none', zIndex:'1000',
+      fontSize:'16px', outline:'none', zIndex:'1000',
     });
     document.body.appendChild(this.buildInputEl);
 
@@ -683,9 +703,9 @@ export default class WobblyScene extends Phaser.Scene {
     this.buildBtnEl.textContent = '⚙ BUILD!';
     Object.assign(this.buildBtnEl.style, {
       position:'fixed', left:'calc(50% + 210px)', bottom:'11px',
-      width:'80px', height:'34px', background:'#c0392b',
+      width:'80px', height:'38px', background:'#c0392b',
       border:'2px solid #922b21', borderRadius:'6px', color:'#fff',
-      fontSize:'13px', fontWeight:'bold', cursor:'pointer', zIndex:'1000',
+      fontSize:'14px', fontWeight:'bold', cursor:'pointer', zIndex:'1000',
     });
     document.body.appendChild(this.buildBtnEl);
 
@@ -694,6 +714,55 @@ export default class WobblyScene extends Phaser.Scene {
       if (e.key === 'Enter') this._handleBuild();
       e.stopPropagation();
     });
+
+    this._createTouchControls();
+  }
+
+  // ── Touch controls ────────────────────────────────────────
+
+  _createTouchControls() {
+    const mk = (label, extraStyle) => {
+      const btn = document.createElement('button');
+      btn.textContent = label;
+      Object.assign(btn.style, {
+        position: 'fixed', width: '68px', height: '68px',
+        background: 'rgba(255,255,255,0.15)', border: '2px solid rgba(255,255,255,0.35)',
+        borderRadius: '14px', color: '#fff', fontSize: '30px',
+        touchAction: 'none', webkitUserSelect: 'none', userSelect: 'none',
+        zIndex: '1001', lineHeight: '68px', textAlign: 'center',
+        padding: '0', cursor: 'pointer', WebkitTapHighlightColor: 'transparent',
+        ...extraStyle,
+      });
+      return btn;
+    };
+
+    this._touchBtnLeft  = mk('◀', { bottom: '62px', left: '12px' });
+    this._touchBtnRight = mk('▶', { bottom: '62px', left: '90px' });
+    this._touchBtnJump  = mk('▲', { bottom: '62px', right: '12px', width: '80px', height: '80px', fontSize: '34px', lineHeight: '80px' });
+
+    const bind = (btn, onDown, onUp) => {
+      const pd = e => e.preventDefault();
+      btn.addEventListener('touchstart',  e => { pd(e); onDown(); }, { passive: false });
+      btn.addEventListener('touchend',    e => { pd(e); onUp();   }, { passive: false });
+      btn.addEventListener('touchcancel', e => { pd(e); onUp();   }, { passive: false });
+      btn.addEventListener('mousedown',  onDown);
+      btn.addEventListener('mouseup',    onUp);
+      btn.addEventListener('mouseleave', onUp);
+    };
+
+    bind(this._touchBtnLeft,
+      () => { this._touchLeft = true; },
+      () => { this._touchLeft = false; });
+    bind(this._touchBtnRight,
+      () => { this._touchRight = true; },
+      () => { this._touchRight = false; });
+    bind(this._touchBtnJump,
+      () => { this._touchJumpJustDown = true; this._touchJump = true; },
+      () => { this._touchJump = false; });
+
+    document.body.appendChild(this._touchBtnLeft);
+    document.body.appendChild(this._touchBtnRight);
+    document.body.appendChild(this._touchBtnJump);
   }
 
   // ── Build ─────────────────────────────────────────────────
@@ -1149,6 +1218,34 @@ export default class WobblyScene extends Phaser.Scene {
     const dt = delta / 1000;
 
     this.stickman?.update(time, delta, this.cursors, this.spaceKey);
+
+    // ── Touch controls (applied after keyboard update) ────────
+    if (this.stickman && !this.stickman.isFalling) {
+      if (this._touchLeft) {
+        this.stickman.physBody.body.setVelocityX(-this.stickman.moveSpeed);
+        this.stickman.facingRight = false;
+        this.stickman.isMoving = true;
+      }
+      if (this._touchRight) {
+        this.stickman.physBody.body.setVelocityX(this.stickman.moveSpeed);
+        this.stickman.facingRight = true;
+        this.stickman.isMoving = true;
+      }
+    }
+    if (this.stickman && this._touchJumpJustDown) {
+      this._touchJumpJustDown = false;
+      if (this.stickman.physBody.body.blocked.down && !this.stickman.isFalling) {
+        this.stickman.physBody.body.setVelocityY(this.stickman.jumpVelocity);
+      }
+    }
+    if (this.stickman && this._touchJump && this.stickman.canFly
+        && !this.stickman.physBody.body.blocked.down && !this.stickman.isFalling) {
+      const tdt = delta / 1000;
+      const cur = this.stickman.physBody.body.velocity.y;
+      this.stickman.physBody.body.setVelocityY(
+        cur + (this.stickman.flySpeed - cur) * Math.min(tdt * 4, 1));
+    }
+
     for (const npc of this.npcs) {
       npc.update(time, delta);
       if ((npc._bopCooldown ?? 0) > 0) npc._bopCooldown -= dt;
