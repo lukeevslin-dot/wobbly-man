@@ -395,6 +395,58 @@ export class Stickman {
             ag.lineBetween(wx - 14 + i * 3, fy - 10 + i * 4, wx - 11 + i * 3, fy - 6 + i * 4);
             ag.lineBetween(wx +  7 + i * 3, fy - 10 + i * 4, wx + 10 + i * 3, fy - 6 + i * 4);
           }
+
+        } else if (att.type === 'atat') {
+          // ── AT-AT Imperial Walker ───────────────────────────
+          const bw = 82, bh = 34;
+          const bodyY = fy - 52;
+          const fd = this.facingRight ? 1 : -1;
+
+          // Main body hull
+          ag.fillStyle(att.color ?? 0xBBBBBB, 1);
+          ag.fillRect(wx - bw / 2, bodyY - bh / 2, bw, bh);
+          ag.lineStyle(2, 0x888888);
+          ag.strokeRect(wx - bw / 2, bodyY - bh / 2, bw, bh);
+          // Panel lines
+          ag.lineStyle(1, 0x999999, 0.5);
+          ag.lineBetween(wx - bw / 2, bodyY, wx + bw / 2, bodyY);
+          ag.lineBetween(wx - bw / 4, bodyY - bh / 2, wx - bw / 4, bodyY + bh / 2);
+
+          // Head (protrudes in facing direction)
+          const headStartX = fd > 0 ? wx + bw / 2 : wx - bw / 2 - 22;
+          ag.fillStyle(att.color ?? 0xBBBBBB, 1);
+          ag.fillRect(headStartX, bodyY - 9, 22, 18);
+          ag.lineStyle(2, 0x888888);
+          ag.strokeRect(headStartX, bodyY - 9, 22, 18);
+          // Red sensor eyes
+          ag.fillStyle(0xFF2222, 1);
+          const eyeX = headStartX + 11;
+          ag.fillCircle(eyeX, bodyY - 3, 3);
+          ag.fillCircle(eyeX, bodyY + 4, 3);
+          // Laser cannons
+          const gunTipX = fd > 0 ? headStartX + 22 : headStartX;
+          ag.lineStyle(3, 0x666666);
+          ag.lineBetween(gunTipX, bodyY - 4, gunTipX + fd * 18, bodyY - 4);
+          ag.lineBetween(gunTipX, bodyY + 4, gunTipX + fd * 18, bodyY + 4);
+
+          // 4 legs with walking animation
+          const legCycle = this.wobbleTime * 2.8;
+          const legs = [
+            { lx: wx - bw / 2 + 14, ph: 0 },
+            { lx: wx - bw / 2 + 28, ph: Math.PI },
+            { lx: wx + bw / 2 - 28, ph: Math.PI * 0.4 },
+            { lx: wx + bw / 2 - 14, ph: Math.PI + 0.4 },
+          ];
+          for (const leg of legs) {
+            const ks = Math.sin(legCycle + leg.ph) * 9;
+            const fs = Math.sin(legCycle + leg.ph + 0.6) * 7;
+            const kneeY = bodyY + bh / 2 + 17;
+            ag.lineStyle(4, 0xAAAAAA);
+            ag.lineBetween(leg.lx, bodyY + bh / 2, leg.lx + ks, kneeY);
+            ag.lineBetween(leg.lx + ks, kneeY, leg.lx + fs, fy);
+            ag.lineStyle(5, 0x888888);
+            ag.lineBetween(leg.lx + fs - 9, fy, leg.lx + fs + 9, fy);
+          }
         }
 
       } else if (att.position === 'back') {

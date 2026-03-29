@@ -1,4 +1,9 @@
 const ITEM_DB = [
+  // Special actions (must be first — their keywords are substrings of other items)
+  { keywords: ['house', 'adu', 'home', 'cabin', 'shack', 'hut'], name: 'House', emoji: '🏠', position: 'none', type: 'house', placesHouse: true, color: 0xD2B48C, description: 'A cozy house! Step inside to pause the clock!' },
+  { keywords: ['cat', 'cats', 'kitty', 'kitten', 'meow', 'tabby', 'feline', 'pussycat', 'kittens'], name: 'Cat Swarm', emoji: '🐱', position: 'none', type: 'cats', catSwarm: true, color: 0xFF8844, description: 'A swarm of cats! They attack birds and give NPCs TOXOPLASMOSIS!' },
+  { keywords: ['at-at', 'atat', 'at at', 'imperial walker', 'star wars walker', 'atst'], name: 'AT-AT Walker', emoji: '🤖', position: 'feet', type: 'atat', speed: 50, color: 0xBBBBBB, description: 'The Imperial AT-AT Walker! Plods slowly but fires LASER BLASTS at NPCs for +5pts!' },
+
   // Flying
   { keywords: ['jetpack', 'jet pack'], name: 'Jetpack', emoji: '🚀', position: 'back', type: 'jetpack', canFly: true, flySpeed: -180, speed: 30, color: 0x888888, description: 'WHOOOOSH! Strapped to your back and ready to blast!' },
   { keywords: ['wings', 'wing', 'angel wings', 'bird wings'], name: 'Wings', emoji: '🪶', position: 'back', type: 'wings', canFly: true, flySpeed: -150, color: 0xFFFFFF, description: 'Magnificent feathery wings! Flap flap flap...' },

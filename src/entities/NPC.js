@@ -12,6 +12,7 @@ export class NPC {
     this.speed      = this.baseSpeed;
     this.isAngry    = false;
     this.angryTarget = null;
+    this.isZombie   = false;
     this.isFallen   = false;
     this.fallTimer  = 0;
     this.minX       = -Infinity;
@@ -35,6 +36,20 @@ export class NPC {
     this.angryTarget = null;
     this.speed       = this.baseSpeed;
     this.physBody.body.setVelocityX(0);
+  }
+
+  makeZombie(target) {
+    if (this.isZombie) return;
+    this.isZombie    = true;
+    this.isFallen    = false;
+    this.fallTimer   = 0;
+    this.isAngry     = true;
+    this.angryTarget = target;
+    this.speed       = this.baseSpeed * 0.65; // slow shambling
+    const t = this.scene.add.text(this.physBody.x, this.physBody.y - 70, '🐱😵 TOXO!', {
+      fontSize: '13px', fill: '#88FF44', stroke: '#000', strokeThickness: 2,
+    }).setOrigin(0.5).setDepth(40);
+    this.scene.tweens.add({ targets: t, y: t.y - 28, alpha: 0, duration: 1400, onComplete: () => t.destroy() });
   }
 
   giveUp() {
@@ -157,32 +172,44 @@ export class NPC {
 
   _drawDefault(g, x, y, sp, t) {
     const skins = { beach: 0xFFDDCC, jungle: 0xFFCC88, volcano: 0xFF9966 };
-    const skin  = skins[this.islandType] ?? 0xFFDDCC;
+    const skin  = this.isZombie ? 0x66CC44 : (skins[this.islandType] ?? 0xFFDDCC);
 
     g.lineStyle(2.5, 0x333333);
     g.fillStyle(skin);
     g.fillCircle(x, y - 34, 11);
     g.strokeCircle(x, y - 34, 11);
 
-    g.fillStyle(0x333333);
-    g.fillCircle(x - 3, y - 36, 1.8);
-    g.fillCircle(x + 3, y - 36, 1.8);
-
-    if (this.isAngry) {
-      g.lineStyle(2.5, 0xFF2222);
-      g.lineBetween(x - 6, y - 42, x - 1, y - 39);
-      g.lineBetween(x + 1, y - 39, x + 6, y - 42);
-      g.lineBetween(x - 4, y - 28, x + 4, y - 30);
-      g.lineStyle(2, 0xFF4444, 0.5);
-      g.strokeCircle(x, y - 20, 22 + Math.sin(t * 10) * 3);
+    if (this.isZombie) {
+      // X eyes
+      g.lineStyle(2, 0x224400);
+      g.lineBetween(x - 6, y - 39, x - 2, y - 33); g.lineBetween(x - 6, y - 33, x - 2, y - 39);
+      g.lineBetween(x + 2, y - 39, x + 6, y - 33);  g.lineBetween(x + 2, y - 33, x + 6, y - 39);
+      // Stitched mouth
+      g.lineStyle(1.5, 0x224400);
+      g.lineBetween(x - 4, y - 28, x + 4, y - 28);
+      for (let i = -3; i <= 3; i += 2) g.lineBetween(x + i, y - 28, x + i, y - 26);
+      // Green aura
+      g.lineStyle(2, 0x44AA22, 0.45);
+      g.strokeCircle(x, y - 20, 22 + Math.sin(t * 8) * 3);
     } else {
-      g.lineStyle(1.5, 0x333333);
-      // Smug mouth (volcano NPCs look more tense)
-      if (this.islandType === 'volcano') {
-        g.lineBetween(x - 4, y - 29, x + 4, y - 29);
+      g.fillStyle(0x333333);
+      g.fillCircle(x - 3, y - 36, 1.8);
+      g.fillCircle(x + 3, y - 36, 1.8);
+      if (this.isAngry) {
+        g.lineStyle(2.5, 0xFF2222);
+        g.lineBetween(x - 6, y - 42, x - 1, y - 39);
+        g.lineBetween(x + 1, y - 39, x + 6, y - 42);
+        g.lineBetween(x - 4, y - 28, x + 4, y - 30);
+        g.lineStyle(2, 0xFF4444, 0.5);
+        g.strokeCircle(x, y - 20, 22 + Math.sin(t * 10) * 3);
       } else {
-        g.lineBetween(x - 3, y - 29, x, y - 27);
-        g.lineBetween(x, y - 27, x + 4, y - 28);
+        g.lineStyle(1.5, 0x333333);
+        if (this.islandType === 'volcano') {
+          g.lineBetween(x - 4, y - 29, x + 4, y - 29);
+        } else {
+          g.lineBetween(x - 3, y - 29, x, y - 27);
+          g.lineBetween(x, y - 27, x + 4, y - 28);
+        }
       }
     }
 

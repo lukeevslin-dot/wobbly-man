@@ -96,6 +96,20 @@ export default class WobblyScene extends Phaser.Scene {
     this._touchBtnLeft      = null;
     this._touchBtnRight     = null;
     this._touchBtnJump      = null;
+    // House pause
+    this._house             = null;
+    this._inHouse           = false;
+    this._houseText         = null;
+    // Cat swarm
+    this._cats              = [];
+    this._catGfx            = null;
+    // AT-AT laser system
+    this._atatFireTimer     = 0;
+    this._atatLasers        = [];
+    this._laserGfx          = null;
+    // Mountain ramp data
+    this.mountainDefs       = [];
+    this._playerMtnColliders = [];
   }
 
   create() {
@@ -122,6 +136,13 @@ export default class WobblyScene extends Phaser.Scene {
     this._touchRight        = false;
     this._touchJump         = false;
     this._touchJumpJustDown = false;
+    this._house             = null;
+    this._inHouse           = false;
+    this._cats              = [];
+    this._atatFireTimer     = 0;
+    this._atatLasers        = [];
+    this.mountainDefs       = [];
+    this._playerMtnColliders = [];
 
     // Remove leftover DOM elements from previous run
     if (this._buildBarEl?.parentNode)   { this._buildBarEl.remove();   this._buildBarEl   = null; }
@@ -150,7 +171,13 @@ export default class WobblyScene extends Phaser.Scene {
     // ── Player ─────────────────────────────────────────────
     this.stickman = new Stickman(this, 120, GROUND_Y - 30);
     this.physics.add.collider(this.stickman.physBody, this.ground);
-    for (const m of this.mountains) this.physics.add.collider(this.stickman.physBody, m);
+    this._playerMtnColliders = [];
+    for (const m of this.mountains) {
+      const col = this.physics.add.collider(this.stickman.physBody, m);
+      this._playerMtnColliders.push(col);
+    }
+    this._catGfx   = this.add.graphics().setDepth(26);
+    this._laserGfx = this.add.graphics().setDepth(27);
 
     // ── NPCs (with solid colliders against player) ─────────
     const npcDefs = [
@@ -449,7 +476,7 @@ export default class WobblyScene extends Phaser.Scene {
     const mg = this.add.graphics().setDepth(0);
 
     // Mountain definitions: { cx, baseW, h, col, snow }
-    const defs = [
+    const defs = this.mountainDefs = [
       // Beach mountains (brownish rocky)
       { cx:  680, baseW: 220, h: 115, col: 0x9E7B5A, snow: 0xFFFFFF },
       { cx: 1550, baseW: 260, h: 130, col: 0x967060, snow: 0xFFFFFF },
@@ -671,7 +698,7 @@ export default class WobblyScene extends Phaser.Scene {
       fontSize: '12px', fill: '#aaa', stroke: '#000', strokeThickness: 2,
     }).setScrollFactor(0).setDepth(100);
 
-    this.add.text(W - 6, H - 6, 'V 3.0', {
+    this.add.text(W - 6, H - 6, 'V 4.0', {
       fontSize: '11px', fill: '#555', stroke: '#000', strokeThickness: 1,
     }).setOrigin(1, 1).setScrollFactor(0).setDepth(100);
 
@@ -683,6 +710,10 @@ export default class WobblyScene extends Phaser.Scene {
       fontSize: '18px', fill: '#FFE44D', stroke: '#222', strokeThickness: 3,
       align: 'center', wordWrap: { width: 460 },
     }).setOrigin(0.5).setScrollFactor(0).setDepth(100);
+
+    this._houseText = this.add.text(W/2, 48, '🏠 CLOCK PAUSED', {
+      fontSize: '19px', fill: '#88FF44', stroke: '#000', strokeThickness: 3, fontStyle: 'bold',
+    }).setOrigin(0.5, 0).setScrollFactor(0).setDepth(100).setVisible(false);
 
     this.buildInputEl = document.createElement('input');
     this.buildInputEl.type = 'text';
@@ -788,6 +819,17 @@ export default class WobblyScene extends Phaser.Scene {
 
     const item = this.buildSystem.interpret(raw);
 
+    // Special non-attachment actions
+    if (item.placesHouse) {
+      this._placeHouse();
+      this._showMsg(`${item.emoji} ${item.name}!\n"${item.description}"`);
+      return;
+    }
+    if (item.catSwarm) {
+      this._spawnCatSwarm();
+      return;
+    }
+
     // Auto-replace: one item at a time
     this.attachments = [];
     this.stickman.clearAttachments();
@@ -797,6 +839,10 @@ export default class WobblyScene extends Phaser.Scene {
     this._updateHUD();
     this._spawnBug(item);
     this._showMsg(`${item.emoji} ${item.name}!\n"${item.description}"`);
+
+    // Mountain colliders: car/truck can drive over (ramp boost), don't block them
+    const hasCar = this._hasCarItem();
+    for (const col of this._playerMtnColliders) col.active = !hasCar;
   }
 
   _showStartScreen() {
@@ -991,7 +1037,7 @@ export default class WobblyScene extends Phaser.Scene {
   _checkNPCGiveUp() {
     if (this.catchCooldown > 0) return;
     for (const npc of this.npcs) {
-      if (!npc.isAngry) continue;
+      if (!npc.isAngry || npc.isZombie) continue; // zombies never give up
       const dx = Math.abs(this.stickman.x - npc.physBody.x);
       if (dx > 560 || (this._hasFastEscape() && dx > 230)) npc.giveUp();
     }
@@ -1269,9 +1315,11 @@ export default class WobblyScene extends Phaser.Scene {
       this.stickman.physBody.setPosition(WORLD_W - 80, this.stickman.physBody.y);
     }
 
-    // Score counts down 1 point per second
-    this.score -= dt;
+    // Score counts down 1 point per second (paused while inside house)
+    this._checkHouse();
+    if (!this._inHouse) this.score -= dt;
     this._updateScoreDisplay();
+    if (this._houseText) this._houseText.setVisible(this._inHouse);
 
     this._checkGaps(dt);
     this._checkLavaBurn(dt);
@@ -1282,6 +1330,9 @@ export default class WobblyScene extends Phaser.Scene {
     this._updateParticles(dt);
     this._updateBirds(dt);
     this._checkBirdCollisions();
+    this._updateCats(dt);
+    this._checkMountainRamps();
+    this._updateATAT(dt);
     this._drawPlanetCurve();
 
     if (this.catchCooldown > 0)   this.catchCooldown -= dt;
@@ -1296,6 +1347,237 @@ export default class WobblyScene extends Phaser.Scene {
       c.gfx.x += c.spd;
       if (c.gfx.x > WORLD_W + 200) c.gfx.x = -200;
     }
+  }
+
+  // ── House / pause clock ─────────────────────────────────────
+
+  _placeHouse() {
+    if (this._house) {
+      this._showMsg('🏠 House already built!\nWalk into the doorway to pause the clock.');
+      return;
+    }
+    const fd = this.stickman.facingRight ? 1 : -1;
+    const hx = this.stickman.x + fd * 110;
+    this._house = { x: hx, w: 90, gfx: this.add.graphics().setDepth(5) };
+    this._drawHouseGraphic(this._house.gfx, hx);
+  }
+
+  _drawHouseGraphic(g, hx) {
+    const hy = GROUND_Y, hw = 90, hh = 75;
+    // Walls
+    g.fillStyle(0xD2B48C, 1);
+    g.fillRect(hx - hw/2, hy - hh, hw, hh);
+    g.lineStyle(2, 0x8B6914);
+    g.strokeRect(hx - hw/2, hy - hh, hw, hh);
+    // Roof
+    g.fillStyle(0xCC3333, 1);
+    g.fillTriangle(hx - hw/2 - 8, hy - hh, hx, hy - hh - 38, hx + hw/2 + 8, hy - hh);
+    g.lineStyle(2, 0x881111);
+    g.lineBetween(hx - hw/2 - 8, hy - hh, hx, hy - hh - 38);
+    g.lineBetween(hx, hy - hh - 38, hx + hw/2 + 8, hy - hh);
+    // Door
+    g.fillStyle(0x8B4513, 1);
+    g.fillRect(hx - 12, hy - 36, 24, 36);
+    g.lineStyle(1.5, 0x5A2D0C);
+    g.strokeRect(hx - 12, hy - 36, 24, 36);
+    g.fillStyle(0xFFCC66, 1);
+    g.fillCircle(hx + 7, hy - 18, 3);
+    // Left window
+    g.fillStyle(0x99DDFF, 0.82);
+    g.fillRect(hx - hw/2 + 9, hy - hh + 15, 20, 16);
+    g.lineStyle(1.5, 0x8B6914);
+    g.strokeRect(hx - hw/2 + 9, hy - hh + 15, 20, 16);
+    g.lineBetween(hx - hw/2 + 19, hy - hh + 15, hx - hw/2 + 19, hy - hh + 31);
+    g.lineBetween(hx - hw/2 + 9, hy - hh + 23, hx - hw/2 + 29, hy - hh + 23);
+    // Right window
+    g.fillStyle(0x99DDFF, 0.82);
+    g.fillRect(hx + hw/2 - 29, hy - hh + 15, 20, 16);
+    g.lineStyle(1.5, 0x8B6914);
+    g.strokeRect(hx + hw/2 - 29, hy - hh + 15, 20, 16);
+    g.lineBetween(hx + hw/2 - 19, hy - hh + 15, hx + hw/2 - 19, hy - hh + 31);
+    g.lineBetween(hx + hw/2 - 29, hy - hh + 23, hx + hw/2 - 9, hy - hh + 23);
+    // Chimney
+    g.fillStyle(0x888888, 1);
+    g.fillRect(hx + hw/2 - 26, hy - hh - 48, 14, 20);
+    g.lineStyle(1.5, 0x666666);
+    g.strokeRect(hx + hw/2 - 26, hy - hh - 48, 14, 20);
+  }
+
+  _checkHouse() {
+    if (!this._house) { this._inHouse = false; return; }
+    const px = this.stickman.x;
+    const wasInside = this._inHouse;
+    this._inHouse = px > this._house.x - 42 && px < this._house.x + 42;
+    if (this._inHouse && !wasInside) {
+      this._showMsg('🏠 Cozy! Clock paused while you\'re inside.');
+    } else if (!this._inHouse && wasInside) {
+      this._showMsg('🏠 Back outside.\nClock is ticking again!');
+    }
+  }
+
+  // ── Cat swarm ─────────────────────────────────────────────
+
+  _spawnCatSwarm() {
+    this._cats = [];
+    for (let i = 0; i < 9; i++) {
+      this._cats.push({
+        x: this.stickman.x + (Math.random() - 0.5) * 80,
+        y: GROUND_Y - 18,
+        vx: (Math.random() - 0.5) * 200,
+        vy: -80 - Math.random() * 120,
+        target: null, phase: Math.random() * Math.PI * 2,
+        done: false, groundTimer: 0,
+      });
+    }
+    this._showMsg('🐱 CAT SWARM UNLEASHED!\nCats hunt birds and spread TOXOPLASMOSIS!');
+  }
+
+  _updateCats(dt) {
+    if (this._cats.length === 0) { this._catGfx?.clear(); return; }
+    const g = this._catGfx;
+    g.clear();
+    for (const cat of this._cats) {
+      if (cat.done) continue;
+      cat.phase += dt * 12;
+      // gravity
+      cat.vy += 400 * dt;
+      cat.x  += cat.vx * dt;
+      cat.y  += cat.vy * dt;
+      if (cat.y >= GROUND_Y - 18) { cat.y = GROUND_Y - 18; cat.vy = 0; cat.groundTimer += dt; }
+
+      // acquire target after settling
+      if (cat.groundTimer > 0.3 && !cat.target) {
+        let nearest = null, nearDist = Infinity;
+        for (const bird of this.birds) {
+          const d = Math.hypot(cat.x - bird.x, cat.y - bird.y);
+          if (d < nearDist) { nearDist = d; nearest = { type: 'bird', ref: bird }; }
+        }
+        if (nearDist > 550) {
+          for (const npc of this.npcs) {
+            if (npc.isZombie || npc.isFallen) continue;
+            const d = Math.hypot(cat.x - npc.physBody.x, cat.y - npc.physBody.y);
+            if (d < nearDist) { nearDist = d; nearest = { type: 'npc', ref: npc }; }
+          }
+        }
+        cat.target = nearest;
+      }
+
+      // chase
+      if (cat.target) {
+        const tx = cat.target.type === 'bird' ? cat.target.ref.x : cat.target.ref.physBody.x;
+        const ty = cat.target.type === 'bird' ? cat.target.ref.y : cat.target.ref.physBody.y - 20;
+        const dx = tx - cat.x, dy = ty - cat.y;
+        const dist = Math.hypot(dx, dy);
+        if (dist < 35) {
+          if (cat.target.type === 'bird') {
+            const idx = this.birds.indexOf(cat.target.ref);
+            if (idx !== -1) {
+              this.birds.splice(idx, 1);
+              const hit = this.add.text(cat.x, cat.y - 25, '🐱✨ POUNCE!', {
+                fontSize: '14px', fill: '#FFE44D', stroke: '#000', strokeThickness: 2,
+              }).setOrigin(0.5).setDepth(80);
+              this.tweens.add({ targets: hit, y: hit.y - 35, alpha: 0, duration: 900, onComplete: () => hit.destroy() });
+            }
+          } else {
+            cat.target.ref.makeZombie(this.stickman);
+          }
+          cat.done = true; continue;
+        }
+        const spd = cat.target.type === 'bird' ? 310 : 175;
+        cat.vx = (dx / dist) * spd;
+        if (cat.target.type === 'bird' && cat.y >= GROUND_Y - 20) cat.vy = -(Math.abs(dy) + 80);
+      }
+      this._drawCat(g, cat.x, cat.y, cat.phase, cat.vx >= 0);
+    }
+    this._cats = this._cats.filter(c => !c.done);
+  }
+
+  _drawCat(g, x, y, phase, facingRight) {
+    const fd = facingRight ? 1 : -1;
+    g.fillStyle(0xFF8844, 1);
+    g.fillEllipse(x, y - 4, 20, 12);
+    g.fillCircle(x + fd * 9, y - 7, 8);
+    // ears
+    const ex = x + fd * 9;
+    g.fillTriangle(ex + fd * 1, y - 13, ex + fd * 5, y - 21, ex - fd * 2, y - 13);
+    g.fillTriangle(ex + fd * 5, y - 13, ex + fd * 9, y - 21, ex + fd * 12, y - 13);
+    // eyes
+    g.fillStyle(0x333333, 1);
+    g.fillCircle(ex + fd * 3, y - 8, 1.8);
+    g.fillCircle(ex + fd * 6, y - 8, 1.8);
+    // tail
+    const tw = Math.sin(phase * 0.7) * 10;
+    g.lineStyle(2.5, 0xFF8844);
+    g.beginPath(); g.moveTo(x - fd * 8, y - 4); g.lineTo(x - fd * 17, y - 8 + tw); g.strokePath();
+    // legs
+    g.lineStyle(2, 0xCC6622);
+    const ls = Math.sin(phase) * 5;
+    g.lineBetween(x - 5, y,  x - 5 + ls,  y + 10);
+    g.lineBetween(x - 1, y,  x - 1 - ls,  y + 10);
+    g.lineBetween(x + 2, y,  x + 2 + ls,  y + 10);
+    g.lineBetween(x + 6, y,  x + 6 - ls,  y + 10);
+  }
+
+  // ── Mountain ramps (for car/truck) ───────────────────────
+
+  _checkMountainRamps() {
+    if (!this._hasCarItem()) return;
+    const body = this.stickman.physBody.body;
+    if (!body.blocked.down) return;
+    if (Math.abs(body.velocity.x) < 50) return;
+    for (const def of this.mountainDefs) {
+      const dx = Math.abs(this.stickman.x - def.cx);
+      if (dx < def.baseW + 55) {
+        body.setVelocityY(-510);
+        this.cameras.main.shake(140, 0.009);
+        const txt = this.add.text(this.stickman.x, this.stickman.y - 40, '🚛 RAMP!', {
+          fontSize: '16px', fill: '#FF9900', stroke: '#000', strokeThickness: 2, fontStyle: 'bold',
+        }).setOrigin(0.5).setDepth(70);
+        this.tweens.add({ targets: txt, y: txt.y - 45, alpha: 0, duration: 700, onComplete: () => txt.destroy() });
+        break;
+      }
+    }
+  }
+
+  // ── AT-AT laser system ────────────────────────────────────
+
+  _updateATAT(dt) {
+    if (!this.attachments.some(a => a.type === 'atat')) {
+      this._laserGfx?.clear(); this._atatLasers = []; return;
+    }
+    this._atatFireTimer -= dt;
+    if (this._atatFireTimer <= 0) { this._atatFireTimer = 2.5; this._fireATATLaser(); }
+    this._atatLasers = this._atatLasers.filter(l => { l.age += dt; return l.age < 0.35; });
+    const g = this._laserGfx;
+    g.clear();
+    for (const l of this._atatLasers) {
+      const a = 1 - l.age / 0.35;
+      g.lineStyle(3.5, 0xFF0066, a);     g.lineBetween(l.sx, l.sy, l.tx, l.ty);
+      g.lineStyle(1.5, 0xFF88CC, a * 0.7); g.lineBetween(l.sx, l.sy, l.tx, l.ty);
+    }
+  }
+
+  _fireATATLaser() {
+    const range = 380;
+    let nearest = null, nearDist = range;
+    for (const npc of this.npcs) {
+      if (npc.isFallen) continue;
+      const dx = npc.physBody.x - this.stickman.x;
+      if ((dx > 0) !== this.stickman.facingRight) continue;
+      const d = Math.hypot(dx, npc.physBody.y - this.stickman.y);
+      if (d < nearDist) { nearDist = d; nearest = npc; }
+    }
+    if (!nearest) return;
+    nearest.knockDown();
+    this._addScore(5);
+    const fd = this.stickman.facingRight ? 1 : -1;
+    const sx = this.stickman.x + fd * 58, sy = this.stickman.y - 50;
+    const tx = nearest.physBody.x, ty = nearest.physBody.y - 25;
+    this._atatLasers.push({ sx, sy, tx, ty, age: 0 });
+    const pts = this.add.text(tx, ty - 30, '⚡ +5', {
+      fontSize: '18px', fill: '#FF44FF', stroke: '#000', strokeThickness: 2, fontStyle: 'bold',
+    }).setOrigin(0.5).setDepth(80);
+    this.tweens.add({ targets: pts, y: pts.y - 45, alpha: 0, duration: 900, onComplete: () => pts.destroy() });
   }
 
   // ── Audio ─────────────────────────────────────────────────
