@@ -57,6 +57,7 @@ export default class WobblyScene extends Phaser.Scene {
     this.attachments     = [];
     this.buildInputEl    = null;
     this.buildBtnEl      = null;
+    this._buildBarEl     = null;
     this.attachmentText  = null;
     this.islandLabel     = null;
     this.scoreText       = null;
@@ -123,6 +124,7 @@ export default class WobblyScene extends Phaser.Scene {
     this._touchJumpJustDown = false;
 
     // Remove leftover DOM elements from previous run
+    if (this._buildBarEl?.parentNode)   { this._buildBarEl.remove();   this._buildBarEl   = null; }
     if (this.buildInputEl?.parentNode)  { this.buildInputEl.remove();  this.buildInputEl  = null; }
     if (this.buildBtnEl?.parentNode)    { this.buildBtnEl.remove();    this.buildBtnEl    = null; }
     if (this._touchBtnLeft?.parentNode) { this._touchBtnLeft.remove(); this._touchBtnLeft = null; }
@@ -691,23 +693,31 @@ export default class WobblyScene extends Phaser.Scene {
     this.buildInputEl.setAttribute('autocapitalize', 'off');
     this.buildInputEl.setAttribute('spellcheck', 'false');
     Object.assign(this.buildInputEl.style, {
-      position:'fixed', left:'50%', transform:'translateX(-50%)',
-      bottom:'11px', width:'min(400px, 56vw)', height:'38px',
+      flex:'1', minWidth:'0', height:'38px',
       background:'rgba(10,10,30,0.92)', border:'2px solid #4a90e2',
       borderRadius:'6px', color:'#fff', padding:'0 10px',
-      fontSize:'16px', outline:'none', zIndex:'1000',
+      fontSize:'16px', outline:'none',
     });
-    document.body.appendChild(this.buildInputEl);
 
     this.buildBtnEl = document.createElement('button');
     this.buildBtnEl.textContent = '⚙ BUILD!';
     Object.assign(this.buildBtnEl.style, {
-      position:'fixed', left:'calc(50% + 210px)', bottom:'11px',
-      width:'80px', height:'38px', background:'#c0392b',
+      flexShrink:'0', width:'80px', height:'38px', background:'#c0392b',
       border:'2px solid #922b21', borderRadius:'6px', color:'#fff',
-      fontSize:'14px', fontWeight:'bold', cursor:'pointer', zIndex:'1000',
+      fontSize:'14px', fontWeight:'bold', cursor:'pointer',
     });
-    document.body.appendChild(this.buildBtnEl);
+
+    // Wrapper keeps input + button together and always on-screen
+    this._buildBarEl = document.createElement('div');
+    Object.assign(this._buildBarEl.style, {
+      position:'fixed', bottom:'11px',
+      left:'50%', transform:'translateX(-50%)',
+      width:'min(490px, 94vw)',
+      display:'flex', gap:'4px', zIndex:'1000',
+    });
+    this._buildBarEl.appendChild(this.buildInputEl);
+    this._buildBarEl.appendChild(this.buildBtnEl);
+    document.body.appendChild(this._buildBarEl);
 
     this.buildBtnEl.addEventListener('click', () => this._handleBuild());
     this.buildInputEl.addEventListener('keydown', e => {
@@ -835,6 +845,7 @@ export default class WobblyScene extends Phaser.Scene {
     for (const obj of this._startUI) obj.destroy();
     this._startUI = [];
 
+    if (this._buildBarEl) this._buildBarEl.style.display = '';
     this.buildInputEl.value       = '';
     this.buildInputEl.placeholder = 'What to build? (boat, jetpack, fire suit, gravity boots…)';
     this.buildBtnEl.textContent   = '⚙ BUILD!';
@@ -1046,8 +1057,7 @@ export default class WobblyScene extends Phaser.Scene {
   async _handleNameSubmit() {
     const name = (this.buildInputEl.value.trim() || 'Anonymous').substring(0, 20);
     this._inGameOver = false;
-    this.buildInputEl.style.display = 'none';
-    this.buildBtnEl.style.display   = 'none';
+    if (this._buildBarEl) this._buildBarEl.style.display = 'none';
     if (this._lbText) this._lbText.setText('Submitting…');
     await this.leaderboard.submit(name, Math.round(this.score));
     const rows = await this.leaderboard.getTop(10);
@@ -1138,8 +1148,7 @@ export default class WobblyScene extends Phaser.Scene {
     }).setOrigin(0.5, 0).setScrollFactor(0).setDepth(201);
 
     // Hide build UI — name was captured at game start
-    this.buildInputEl.style.display = 'none';
-    this.buildBtnEl.style.display   = 'none';
+    if (this._buildBarEl) this._buildBarEl.style.display = 'none';
 
     // Auto-submit score and show leaderboard
     this.leaderboard.submit(this.playerName, Math.round(this.score)).then(() => {
