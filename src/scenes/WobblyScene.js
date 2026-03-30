@@ -116,6 +116,18 @@ export default class WobblyScene extends Phaser.Scene {
     // Mountain ramp data
     this.mountainDefs       = [];
     this._playerMtnColliders = [];
+    // Black hole
+    this._blackHole         = null;
+    this._blackHoleGfx      = null;
+    // Fireworks
+    this._fireworkParticles = [];
+    this._fireworkRockets   = [];
+    this._fireworkGfx       = null;
+    // Death Star
+    this._deathStarActive   = false;
+    this._deathStarGfx      = null;
+    this._deathStarPhase    = 'approach'; // 'approach' | 'charge' | 'fire' | 'explode'
+    this._deathStarTimer    = 0;
   }
 
   create() {
@@ -152,6 +164,12 @@ export default class WobblyScene extends Phaser.Scene {
     this._atatLasers        = [];
     this.mountainDefs       = [];
     this._playerMtnColliders = [];
+    this._blackHole         = null;
+    this._fireworkParticles = [];
+    this._fireworkRockets   = [];
+    this._deathStarActive   = false;
+    this._deathStarPhase    = 'approach';
+    this._deathStarTimer    = 0;
 
     // Stop any active speech recognition
     if (this._speechRec) { try { this._speechRec.stop(); } catch (_) {} this._speechRec = null; }
@@ -190,8 +208,11 @@ export default class WobblyScene extends Phaser.Scene {
       const col = this.physics.add.collider(this.stickman.physBody, m);
       this._playerMtnColliders.push(col);
     }
-    this._catGfx   = this.add.graphics().setDepth(26);
-    this._laserGfx = this.add.graphics().setDepth(27);
+    this._catGfx        = this.add.graphics().setDepth(26);
+    this._laserGfx      = this.add.graphics().setDepth(27);
+    this._blackHoleGfx  = this.add.graphics().setDepth(28);
+    this._fireworkGfx   = this.add.graphics().setDepth(29);
+    this._deathStarGfx  = this.add.graphics().setScrollFactor(0).setDepth(160);
 
     // ── NPCs (with solid colliders against player) ─────────
     const npcDefs = [
@@ -712,7 +733,7 @@ export default class WobblyScene extends Phaser.Scene {
       fontSize: '12px', fill: '#aaa', stroke: '#000', strokeThickness: 2,
     }).setScrollFactor(0).setDepth(100);
 
-    this.add.text(W - 6, H - 6, 'V 4.2', {
+    this.add.text(W - 6, H - 6, 'V 4.3', {
       fontSize: '11px', fill: '#555', stroke: '#000', strokeThickness: 1,
     }).setOrigin(1, 1).setScrollFactor(0).setDepth(100);
 
@@ -940,6 +961,20 @@ export default class WobblyScene extends Phaser.Scene {
     }
     if (item.catSwarm) {
       this._spawnCatSwarm();
+      return;
+    }
+    if (item.blackHole) {
+      this._spawnBlackHole();
+      this._showMsg(`${item.emoji} ${item.name}!\n"${item.description}"`);
+      return;
+    }
+    if (item.fireworks) {
+      this._launchFireworks();
+      this._showMsg(`${item.emoji} ${item.name}!\n"${item.description}"`);
+      return;
+    }
+    if (item.deathStar) {
+      this._triggerDeathStar();
       return;
     }
 
@@ -1450,6 +1485,8 @@ export default class WobblyScene extends Phaser.Scene {
     this._updateCats(dt);
     this._checkMountainRamps();
     this._updateATAT(dt);
+    this._updateBlackHole(dt);
+    this._updateFireworks(dt);
     this._drawPlanetCurve();
 
     if (this.catchCooldown > 0)   this.catchCooldown -= dt;
@@ -1832,8 +1869,431 @@ export default class WobblyScene extends Phaser.Scene {
     } catch (e) {}
   }
 
+  // ── Black Hole ────────────────────────────────────────────
+
+  _spawnBlackHole() {
+    if (this._blackHole) {
+      this._showMsg('🕳️ Black hole already active!');
+      return;
+    }
+    const bx = this.stickman.x + (this.stickman.facingRight ? 150 : -150);
+    this._blackHole = { x: bx, y: GROUND_Y - 60, age: 0, lifetime: 12, pullRadius: 500, phase: 0 };
+  }
+
+  _updateBlackHole(dt) {
+    const bh = this._blackHole;
+    const g  = this._blackHoleGfx;
+    g.clear();
+    if (!bh) return;
+
+    bh.age   += dt;
+    bh.phase += dt * 3;
+    if (bh.age >= bh.lifetime) {
+      this._blackHole = null;
+      return;
+    }
+
+    // Fade in / out
+    const progress = bh.age / bh.lifetime;
+    const fadeIn   = Math.min(1, bh.age / 1.2);
+    const fadeOut  = progress > 0.8 ? 1 - (progress - 0.8) / 0.2 : 1;
+    const alpha    = fadeIn * fadeOut;
+    const radius   = 28 * fadeIn;
+
+    // Draw swirling black hole
+    g.fillStyle(0x000000, alpha);
+    g.fillCircle(bh.x, bh.y, radius);
+    // Purple halo rings
+    for (let r = 0; r < 3; r++) {
+      const ringR = radius + 8 + r * 8;
+      const a = alpha * (0.5 - r * 0.12);
+      g.lineStyle(3 - r, 0x8800FF, a);
+      g.strokeCircle(bh.x, bh.y, ringR);
+    }
+    // Swirl effect — draw a few arcs
+    for (let i = 0; i < 5; i++) {
+      const angle = bh.phase + i * (Math.PI * 2 / 5);
+      const sx    = bh.x + Math.cos(angle) * radius;
+      const sy    = bh.y + Math.sin(angle) * radius;
+      const ex    = bh.x + Math.cos(angle + 0.8) * (radius + 12);
+      const ey    = bh.y + Math.sin(angle + 0.8) * (radius + 12);
+      g.lineStyle(2, 0xAA44FF, alpha * 0.8);
+      g.lineBetween(sx, sy, ex, ey);
+    }
+
+    // Pull all non-fallen, non-absorbed NPCs toward black hole
+    for (const npc of this.npcs) {
+      if (npc.isFallen || npc._absorbedByHole) continue;
+      const dx   = bh.x - npc.physBody.x;
+      const dy   = bh.y - npc.physBody.y;
+      const dist = Math.hypot(dx, dy);
+      if (dist < bh.pullRadius * fadeIn) {
+        const force = (1 - dist / (bh.pullRadius * fadeIn)) * 900 * fadeIn;
+        npc.physBody.body.setVelocityX(npc.physBody.body.velocity.x + (dx / dist) * force * dt);
+        npc.physBody.body.setVelocityY(npc.physBody.body.velocity.y + (dy / dist) * force * dt);
+      }
+      // Absorb if within event horizon
+      if (dist < radius + 10) {
+        npc._absorbedByHole = true;
+        npc.physBody.setVisible(false);
+        npc.physBody.body.setVelocity(0, 0);
+        npc.physBody.body.setEnable(false);
+        this._addScore(2);
+        const pts = this.add.text(bh.x, bh.y - 30, '+2 💫', {
+          fontSize: '18px', fill: '#CC88FF', stroke: '#000', strokeThickness: 2, fontStyle: 'bold',
+        }).setOrigin(0.5).setDepth(80);
+        this.tweens.add({ targets: pts, y: pts.y - 40, alpha: 0, duration: 900, onComplete: () => pts.destroy() });
+      }
+    }
+  }
+
+  // ── Fireworks ────────────────────────────────────────────
+
+  _launchFireworks() {
+    // Destroy all birds with particle bursts
+    const killed = this.birds.length;
+    for (const bird of this.birds) {
+      this._fwBurst(bird.x, bird.y, [0xFF8800, 0xFFFF00, 0xFF4444, 0xFFFFFF]);
+    }
+    this.birds = [];
+    if (killed > 0) this._showMsg(`🎆 FIREWORKS! ${killed} birds incinerated!`);
+    else this._showMsg('🎆 FIREWORKS! Spectacular show!');
+
+    // Launch 12 rockets from around player position
+    const px = this.stickman.x;
+    for (let i = 0; i < 12; i++) {
+      this.time.delayedCall(i * 220 + Math.random() * 120, () => {
+        const rx  = px + (Math.random() - 0.5) * 400;
+        const col = [0xFF2200, 0x00FFAA, 0xFFEE00, 0xFF00FF, 0x00AAFF][Math.floor(Math.random() * 5)];
+        this._fireworkRockets.push({
+          x: rx, y: GROUND_Y - 10,
+          vy: -520 - Math.random() * 200,
+          color: col,
+          trail: [],
+          burst: false,
+        });
+      });
+    }
+  }
+
+  _fwBurst(bx, by, colors) {
+    const count = 18 + Math.floor(Math.random() * 12);
+    for (let i = 0; i < count; i++) {
+      const angle = (i / count) * Math.PI * 2;
+      const spd   = 120 + Math.random() * 180;
+      this._fireworkParticles.push({
+        x: bx, y: by,
+        vx: Math.cos(angle) * spd,
+        vy: Math.sin(angle) * spd - 40,
+        color: colors[Math.floor(Math.random() * colors.length)],
+        life: 1.0 + Math.random() * 0.6,
+        age: 0,
+      });
+    }
+  }
+
+  _updateFireworks(dt) {
+    const g = this._fireworkGfx;
+    g.clear();
+
+    // Update rockets
+    for (let i = this._fireworkRockets.length - 1; i >= 0; i--) {
+      const r = this._fireworkRockets[i];
+      r.vy += 180 * dt;
+      r.y  += r.vy * dt;
+      r.trail.push({ x: r.x, y: r.y });
+      if (r.trail.length > 8) r.trail.shift();
+      // Draw trail
+      for (let j = 0; j < r.trail.length - 1; j++) {
+        const a = (j / r.trail.length) * 0.7;
+        g.lineStyle(2, r.color, a);
+        g.lineBetween(r.trail[j].x, r.trail[j].y, r.trail[j + 1].x, r.trail[j + 1].y);
+      }
+      // Burst when slowing near apex
+      if (!r.burst && r.vy >= -40) {
+        r.burst = true;
+        this._fwBurst(r.x, r.y, [r.color, 0xFFFFFF, r.color | 0x444444]);
+        this._fireworkRockets.splice(i, 1);
+        this._playFireworkBoom(r.x, r.y);
+        this.cameras.main.shake(80, 0.005);
+      }
+    }
+
+    // Update particles
+    for (let i = this._fireworkParticles.length - 1; i >= 0; i--) {
+      const p = this._fireworkParticles[i];
+      p.age += dt;
+      if (p.age >= p.life) { this._fireworkParticles.splice(i, 1); continue; }
+      p.vy += 160 * dt;
+      p.vx *= 0.97;
+      p.x  += p.vx * dt;
+      p.y  += p.vy * dt;
+      const a = 1 - p.age / p.life;
+      g.fillStyle(p.color, a);
+      g.fillRect(p.x - 2, p.y - 2, 4, 4);
+    }
+  }
+
+  _playFireworkBoom(wx, wy) {
+    try {
+      const ctx = this._ac;
+      if (!ctx) return;
+      const buf  = ctx.createBuffer(1, ctx.sampleRate * 0.5, ctx.sampleRate);
+      const data = buf.getChannelData(0);
+      for (let i = 0; i < data.length; i++) data[i] = (Math.random() * 2 - 1) * Math.exp(-i / (ctx.sampleRate * 0.08));
+      const src  = ctx.createBufferSource();
+      const gain = ctx.createGain();
+      src.buffer = buf;
+      src.connect(gain); gain.connect(ctx.destination);
+      gain.gain.setValueAtTime(0.3, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.45);
+      src.start(ctx.currentTime);
+    } catch (e) {}
+  }
+
+  // ── Death Star ───────────────────────────────────────────
+
+  _triggerDeathStar() {
+    if (this._gameEnded) return;
+    this._gameEnded       = true;
+    this._deathStarActive = true;
+    this._deathStarPhase  = 'approach';
+    this._deathStarTimer  = 0;
+
+    this._stopMusic();
+    this.stickman.physBody.body.setVelocity(0, 0);
+
+    // Zoom out to see the whole world (scroll factor 0 graphics handle screen-space drawing)
+    this.cameras.main.stopFollow();
+    this.cameras.main.pan(WORLD_W / 2, this.scale.height / 2, 2200, 'Power2');
+    this.cameras.main.zoomTo(0.055, 2500, 'Power2');
+
+    this._showMsg('💀 DEATH STAR APPROACHES…\nTHE WORLD WILL BE DESTROYED!');
+
+    // Play imperial drone sound
+    this._playImperialDrone();
+
+    // Register a persistent update callback for the cinematic
+    this.events.on('update', this._updateDeathStar, this);
+  }
+
+  _updateDeathStar(time, delta) {
+    const dt = delta / 1000;
+    this._deathStarTimer += dt;
+    const g  = this._deathStarGfx;
+    const W  = this.scale.width;
+    const H  = this.scale.height;
+    g.clear();
+
+    if (this._deathStarPhase === 'approach') {
+      // Death Star drops in from top-right over 2.5s
+      const t    = Math.min(this._deathStarTimer / 2.5, 1);
+      const ease = t * t * (3 - 2 * t); // smoothstep
+      const dsx  = W * 0.78;
+      const dsy  = -90 + ease * (H * 0.22 + 90);
+      this._drawDeathStarSprite(g, dsx, dsy, 72);
+      this._dsPos = { x: dsx, y: dsy };
+      if (this._deathStarTimer >= 2.5) {
+        this._deathStarPhase = 'charge';
+        this._deathStarTimer = 0;
+        this._playDeathStarCharge();
+      }
+    } else if (this._deathStarPhase === 'charge') {
+      // Pulsing green glow on the dish, 1.8s
+      this._drawDeathStarSprite(g, this._dsPos.x, this._dsPos.y, 72);
+      const chargeT  = Math.min(this._deathStarTimer / 1.8, 1);
+      const glowSize = chargeT * 28;
+      g.fillStyle(0x00FF44, chargeT * 0.85);
+      g.fillCircle(this._dsPos.x + 14, this._dsPos.y + 16, glowSize);
+      if (this._deathStarTimer >= 1.8) {
+        this._deathStarPhase = 'fire';
+        this._deathStarTimer = 0;
+        this._playDeathStarFire();
+      }
+    } else if (this._deathStarPhase === 'fire') {
+      // Green superlaser beam across the whole screen for 0.6s
+      this._drawDeathStarSprite(g, this._dsPos.x, this._dsPos.y, 72);
+      const alpha = 1 - this._deathStarTimer / 0.6;
+      g.lineStyle(8, 0x00FF44, alpha);
+      g.lineBetween(this._dsPos.x + 14, this._dsPos.y + 16, -20, H * 0.6);
+      g.lineStyle(4, 0xAAFFAA, alpha * 0.6);
+      g.lineBetween(this._dsPos.x + 14, this._dsPos.y + 16, -20, H * 0.6);
+      if (this._deathStarTimer >= 0.6) {
+        this._deathStarPhase = 'explode';
+        this._deathStarTimer = 0;
+        this._worldExplosion();
+      }
+    } else if (this._deathStarPhase === 'explode') {
+      // Draw explosion particles (drawn by _fireworkGfx, already handled)
+      // After 3.5s show game over
+      if (this._deathStarTimer >= 3.5) {
+        this._deathStarPhase = 'done';
+        this._deathStarTimer = 0;
+        this.events.off('update', this._updateDeathStar, this);
+        this._showDeathStarGameOver();
+      }
+    }
+  }
+
+  _drawDeathStarSprite(g, cx, cy, r) {
+    // Main sphere
+    g.fillStyle(0x888888, 1);
+    g.fillCircle(cx, cy, r);
+    // Darker equator stripe
+    g.fillStyle(0x555555, 0.6);
+    g.fillRect(cx - r, cy - 6, r * 2, 12);
+    // Superlaser dish
+    g.fillStyle(0x333333, 1);
+    g.fillCircle(cx + r * 0.18, cy + r * 0.22, r * 0.32);
+    g.fillStyle(0x222222, 1);
+    g.fillCircle(cx + r * 0.18, cy + r * 0.22, r * 0.18);
+    // Edge shading
+    g.lineStyle(3, 0x444444, 0.7);
+    g.strokeCircle(cx, cy, r);
+  }
+
+  _worldExplosion() {
+    const W = this.scale.width;
+    const H = this.scale.height;
+    this.cameras.main.shake(800, 0.04);
+    this.cameras.main.flash(600, 255, 200, 100);
+
+    // Spawn many particles from centre of screen
+    const cx = W * 0.4, cy = H * 0.6;
+    const colors = [0xFF4400, 0xFF8800, 0xFFFF00, 0xFFFFFF, 0xFF2200, 0xFF6600];
+    for (let i = 0; i < 80; i++) {
+      const angle = Math.random() * Math.PI * 2;
+      const spd   = 60 + Math.random() * 280;
+      this._fireworkParticles.push({
+        x: cx + (Math.random() - 0.5) * W * 0.6,
+        y: cy + (Math.random() - 0.5) * H * 0.5,
+        vx: Math.cos(angle) * spd,
+        vy: Math.sin(angle) * spd,
+        color: colors[Math.floor(Math.random() * colors.length)],
+        life: 2.0 + Math.random() * 1.5,
+        age: 0,
+      });
+    }
+    this._playExplosionSound();
+  }
+
+  _showDeathStarGameOver() {
+    const W = this.scale.width, H = this.scale.height;
+    const finalScore = Math.round(this.score);
+    this._inGameOver = true;
+
+    this.add.rectangle(W / 2, H / 2, W, H, 0x000000, 0.95)
+      .setScrollFactor(0).setDepth(200);
+
+    this.add.text(W / 2, H * 0.12, '☠ ALDERAAN PROTOCOL ☠', {
+      fontSize: '22px', fill: '#00FF44', stroke: '#000', strokeThickness: 3, fontStyle: 'bold',
+    }).setOrigin(0.5).setScrollFactor(0).setDepth(201);
+
+    this.add.text(W / 2, H * 0.24, 'THE DEATH STAR DESTROYED YOUR WORLD', {
+      fontSize: '13px', fill: '#FF4444', stroke: '#000', strokeThickness: 2,
+    }).setOrigin(0.5).setScrollFactor(0).setDepth(201);
+
+    this.add.text(W / 2, H * 0.34, `Final Score: ${finalScore} ⭐`, {
+      fontSize: '18px', fill: '#FFE44D', stroke: '#000', strokeThickness: 2, fontStyle: 'bold',
+    }).setOrigin(0.5).setScrollFactor(0).setDepth(201);
+
+    this.add.text(W / 2, H * 0.44, '─── LEADERBOARD ───', {
+      fontSize: '13px', fill: '#FFE44D', fontFamily: 'monospace', fontStyle: 'bold',
+    }).setOrigin(0.5).setScrollFactor(0).setDepth(201);
+
+    this._lbText = this.add.text(W / 2, H * 0.50, 'Loading…', {
+      fontSize: '13px', fill: '#ccc', fontFamily: 'monospace', align: 'center',
+    }).setOrigin(0.5, 0).setScrollFactor(0).setDepth(201);
+
+    this.leaderboard.submit(this.playerName, finalScore)
+      .then(() => this.leaderboard.getTop(8))
+      .then(rows => this._renderLeaderboard(rows, this.playerName));
+
+    this.add.text(W / 2, H * 0.86, 'PRESS SPACE to play again', {
+      fontSize: '13px', fill: '#aaa', stroke: '#000', strokeThickness: 2,
+    }).setOrigin(0.5).setScrollFactor(0).setDepth(201);
+
+    this.time.delayedCall(600, () => {
+      this.input.keyboard.once('keydown-SPACE', () => this.scene.restart());
+    });
+  }
+
+  _playImperialDrone() {
+    try {
+      const ctx = this._ac;
+      if (!ctx) return;
+      // Deep ominous drone
+      const freqs = [55, 82.5, 110];
+      for (const f of freqs) {
+        const osc  = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.connect(gain); gain.connect(ctx.destination);
+        osc.type = 'sawtooth';
+        osc.frequency.value = f;
+        gain.gain.setValueAtTime(0, ctx.currentTime);
+        gain.gain.linearRampToValueAtTime(0.08, ctx.currentTime + 1.0);
+        gain.gain.linearRampToValueAtTime(0.10, ctx.currentTime + 3.5);
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 5.5);
+        osc.start(ctx.currentTime);
+        osc.stop(ctx.currentTime + 5.6);
+      }
+    } catch (e) {}
+  }
+
+  _playDeathStarCharge() {
+    try {
+      const ctx = this._ac;
+      if (!ctx) return;
+      const osc  = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain); gain.connect(ctx.destination);
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(200, ctx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(1800, ctx.currentTime + 1.8);
+      gain.gain.setValueAtTime(0.15, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 1.9);
+      osc.start(ctx.currentTime);
+      osc.stop(ctx.currentTime + 2.0);
+    } catch (e) {}
+  }
+
+  _playDeathStarFire() {
+    try {
+      const ctx = this._ac;
+      if (!ctx) return;
+      const osc  = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain); gain.connect(ctx.destination);
+      osc.type = 'square';
+      osc.frequency.setValueAtTime(2200, ctx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(80, ctx.currentTime + 0.6);
+      gain.gain.setValueAtTime(0.35, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.65);
+      osc.start(ctx.currentTime);
+      osc.stop(ctx.currentTime + 0.7);
+    } catch (e) {}
+  }
+
+  _playExplosionSound() {
+    try {
+      const ctx  = this._ac;
+      if (!ctx) return;
+      const buf  = ctx.createBuffer(1, ctx.sampleRate * 1.5, ctx.sampleRate);
+      const data = buf.getChannelData(0);
+      for (let i = 0; i < data.length; i++) data[i] = (Math.random() * 2 - 1) * Math.exp(-i / (ctx.sampleRate * 0.35));
+      const src  = ctx.createBufferSource();
+      const gain = ctx.createGain();
+      src.buffer = buf;
+      src.connect(gain); gain.connect(ctx.destination);
+      gain.gain.setValueAtTime(0.8, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 1.4);
+      src.start(ctx.currentTime);
+    } catch (e) {}
+  }
+
   shutdown() {
     this._stopMusic();
+    this.events.off('update', this._updateDeathStar, this);
     if (this._speechRec) { try { this._speechRec.stop(); } catch (_) {} this._speechRec = null; }
     this._inGameOver    = false;
     this._awaitingStart = false;

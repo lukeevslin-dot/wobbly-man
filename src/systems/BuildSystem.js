@@ -3,6 +3,9 @@ const ITEM_DB = [
   { keywords: ['house', 'adu', 'home', 'cabin', 'shack', 'hut'], name: 'House', emoji: '🏠', position: 'none', type: 'house', placesHouse: true, color: 0xD2B48C, description: 'A cozy house! Jump at the door to pause the clock!' },
   { keywords: ['cat', 'cats', 'kitty', 'kitten', 'meow', 'tabby', 'feline', 'pussycat', 'kittens'], name: 'Cat Swarm', emoji: '🐱', position: 'none', type: 'cats', catSwarm: true, color: 0xFF8844, description: 'A swarm of cats! They attack birds and give NPCs TOXOPLASMOSIS!' },
   { keywords: ['at-at', 'atat', 'at at', 'imperial walker', 'star wars walker', 'atst'], name: 'AT-AT Walker', emoji: '🤖', position: 'feet', type: 'atat', speed: 50, color: 0xBBBBBB, description: 'The Imperial AT-AT Walker! Plods slowly but fires LASER BLASTS at NPCs for +5pts!' },
+  { keywords: ['black hole', 'blackhole', 'singularity', 'event horizon'], name: 'Black Hole', emoji: '🕳️', position: 'none', type: 'blackhole', blackHole: true, color: 0x000000, description: 'A genuine black hole! All NPCs get sucked in for +2pts each!' },
+  { keywords: ['fireworks', 'firework', 'pyrotechnics', 'celebration', 'fireworks display'], name: 'Fireworks', emoji: '🎆', position: 'none', type: 'fireworks', fireworks: true, color: 0xFF4444, description: 'BOOM! Firework display! All birds go KABOOM in a shower of sparks!' },
+  { keywords: ['death star', 'deathstar', 'death-star', 'alderaan', 'superlaser'], name: 'Death Star', emoji: '💀', position: 'none', type: 'deathstar', deathStar: true, color: 0x888888, description: 'The ultimate weapon. Game over. The world explodes.' },
 
   // Star Wars vehicles
   { keywords: ['speeder bike', 'speederbike', 'scout bike', 'imperial speeder', 'scout trooper'], name: 'Speeder Bike', emoji: '🏍', position: 'feet', type: 'wheels', subtype: 'speeder', speed: 225, rams: true, color: 0x999988, description: 'VROOM! Imperial Scout Speeder. Fast, low, and rams NPCs flying!' },
