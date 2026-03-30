@@ -15,6 +15,7 @@ export class Stickman {
 
     // State
     this.onFire = false;
+    this._suppressNextJump = false;
 
     // Stats
     this.moveSpeed = 110;
@@ -106,10 +107,11 @@ export class Stickman {
       body.setVelocityX(body.velocity.x * this.frictionFactor);
     }
 
-    // Jump
-    if (Phaser.Input.Keyboard.JustDown(spaceKey) && onGround) {
+    // Jump (suppressNextJump lets scene consume the keypress for house entry)
+    if (!this._suppressNextJump && Phaser.Input.Keyboard.JustDown(spaceKey) && onGround) {
       body.setVelocityY(this.jumpVelocity);
     }
+    this._suppressNextJump = false;
 
     // Fly (hold space while airborne)
     if (this.canFly && spaceKey.isDown && !onGround) {
@@ -361,6 +363,42 @@ export class Stickman {
               ag.lineStyle(1.5, 0x666666);
               ag.strokeCircle(wx2, fy, 5);
             }
+          } else if (att.subtype === 'speeder') {
+            // ── Speeder Bike ─────────────────────────────────
+            const fd = this.facingRight ? 1 : -1;
+            // Main elongated body
+            ag.fillStyle(att.color ?? 0x999988, 1);
+            ag.fillRoundedRect(wx - 38, fy - 16, 76, 14, 5);
+            ag.lineStyle(2, 0x666655);
+            ag.strokeRoundedRect(wx - 38, fy - 16, 76, 14, 5);
+            // Pointed nose in facing direction
+            ag.fillStyle(att.color ?? 0x999988, 1);
+            ag.fillTriangle(wx + fd * 38, fy - 15, wx + fd * 38, fy - 3, wx + fd * 52, fy - 9);
+            ag.lineStyle(1.5, 0x666655);
+            ag.lineBetween(wx + fd * 38, fy - 15, wx + fd * 52, fy - 9);
+            ag.lineBetween(wx + fd * 52, fy - 9, wx + fd * 38, fy - 3);
+            // Steering vane (top fin, near front)
+            const vaneX = wx + fd * 20;
+            ag.fillStyle(0xAAAB99, 1);
+            ag.fillRect(vaneX - 3, fy - 28, 6, 13);
+            ag.lineStyle(1.5, 0x666655);
+            ag.strokeRect(vaneX - 3, fy - 28, 6, 13);
+            // Engine pods at rear
+            const rearX = wx - fd * 26;
+            ag.fillStyle(0x777766, 1);
+            ag.fillRect(rearX - 7, fy - 14, 14, 13);
+            ag.lineStyle(1.5, 0x555544);
+            ag.strokeRect(rearX - 7, fy - 14, 14, 13);
+            // Thruster glow
+            const fl = 5 + Math.sin(this.wobbleTime * 18) * 3;
+            ag.fillStyle(0xFF8800, 0.9);
+            ag.fillEllipse(rearX - fd * 8, fy - 8, 8, fl * 1.4);
+            ag.fillStyle(0xFFFF44, 0.7);
+            ag.fillEllipse(rearX - fd * 8, fy - 8, 5, fl);
+            // Hover glow underside
+            ag.fillStyle(0x44CCFF, 0.2);
+            ag.fillEllipse(wx, fy + 4, 90, 8);
+
           } else {
             // ── Generic wheels ───────────────────────────────
           ag.fillStyle(att.color ?? 0xCC0000, 0.5);
@@ -467,6 +505,125 @@ export class Stickman {
           ag.fillStyle(0xFFFFFF, 0.5);
           ag.fillCircle(wx - 29, wy - 13, 3);
           ag.fillCircle(wx + 23, wy - 13, 3);
+
+        } else if (att.subtype === 'xwing') {
+          // ── X-Wing Starfighter ──────────────────────────────
+          const fd = this.facingRight ? 1 : -1;
+          const bx = wx + fd * 8, by = wy - 8;
+          // Fuselage
+          ag.fillStyle(0xCCCCCC, 1);
+          ag.fillRoundedRect(bx - fd * 48, by - 7, 56, 14, 4);
+          ag.lineStyle(2, 0x888888);
+          ag.strokeRoundedRect(bx - fd * 48, by - 7, 56, 14, 4);
+          // Cockpit dome
+          ag.fillStyle(0x88AACC, 0.85);
+          ag.fillEllipse(bx + fd * 7, by - 2, 18, 11);
+          ag.lineStyle(1.5, 0x557799);
+          ag.strokeEllipse(bx + fd * 7, by - 2, 18, 11);
+          // Red stripes on fuselage
+          ag.lineStyle(2.5, 0xFF2222);
+          ag.lineBetween(bx - fd * 10, by - 7, bx - fd * 30, by - 7);
+          // X wings (4) from wing root on fuselage rear
+          const rw = bx - fd * 30;
+          ag.lineStyle(5, 0xBBBBBB);
+          ag.lineBetween(rw, by - 2, rw - fd * 10, by - 36); // upper-rear
+          ag.lineBetween(rw, by - 2, rw + fd * 8, by - 28);  // upper-front
+          ag.lineBetween(rw, by + 2, rw - fd * 10, by + 36); // lower-rear
+          ag.lineBetween(rw, by + 2, rw + fd * 8, by + 28);  // lower-front
+          // Red stripe on wings
+          ag.lineStyle(2, 0xFF2222, 0.8);
+          ag.lineBetween(rw - fd * 2, by - 12, rw - fd * 8, by - 30);
+          ag.lineBetween(rw - fd * 2, by + 12, rw - fd * 8, by + 30);
+          // Engine glow (4 tips)
+          const eg = 4 + Math.sin(this.wobbleTime * 14) * 2;
+          ag.fillStyle(0xFF8800, 0.95);
+          for (const [ex, ey] of [[rw - fd*10, by-36],[rw + fd*8, by-28],[rw - fd*10, by+36],[rw + fd*8, by+28]]) {
+            ag.fillCircle(ex, ey, eg);
+            ag.fillStyle(0xFFEE44, 0.8); ag.fillCircle(ex, ey, eg * 0.5); ag.fillStyle(0xFF8800, 0.95);
+          }
+          // R2D2 dome
+          ag.fillStyle(0x8899BB, 1);
+          ag.fillCircle(bx - fd * 14, by - 7, 4);
+
+        } else if (att.subtype === 'tiefighter') {
+          // ── TIE Fighter ────────────────────────────────────
+          const bx = wx + 6, by = wy - 8;
+          const fd = this.facingRight ? 1 : -1;
+          // Central cockpit ball
+          ag.fillStyle(0x333344, 1);
+          ag.fillCircle(bx, by, 17);
+          ag.lineStyle(2, 0x111122);
+          ag.strokeCircle(bx, by, 17);
+          // Viewport
+          ag.fillStyle(0x66BBFF, 0.75);
+          ag.fillCircle(bx + fd * 4, by, 8);
+          ag.lineStyle(1.5, 0x2244AA);
+          ag.strokeCircle(bx + fd * 4, by, 8);
+          // Struts to panels
+          ag.lineStyle(3, 0x333344);
+          ag.lineBetween(bx - 17, by, bx - 40, by);
+          ag.lineBetween(bx + 17, by, bx + 40, by);
+          // Hex solar panels
+          const pw = 28, ph = 48;
+          for (const panelX of [bx - 40, bx + 40]) {
+            ag.fillStyle(0x11113A, 1);
+            ag.fillRect(panelX - pw/2, by - ph/2, pw, ph);
+            ag.lineStyle(1.5, 0x333377);
+            ag.strokeRect(panelX - pw/2, by - ph/2, pw, ph);
+            ag.lineStyle(1, 0x4444AA, 0.65);
+            // grid lines
+            for (let gi = 1; gi < 4; gi++) ag.lineBetween(panelX - pw/2, by - ph/2 + gi*(ph/4), panelX + pw/2, by - ph/2 + gi*(ph/4));
+            for (let gi = 1; gi < 3; gi++) ag.lineBetween(panelX - pw/2 + gi*(pw/3), by - ph/2, panelX - pw/2 + gi*(pw/3), by + ph/2);
+          }
+          // Engine glow at rear
+          const eg2 = 4 + Math.sin(this.wobbleTime * 16) * 2;
+          ag.fillStyle(0x00EEFF, 0.85);
+          ag.fillCircle(bx - fd * 17, by, eg2);
+          ag.fillStyle(0x88FFFF, 0.7);
+          ag.fillCircle(bx - fd * 17, by, eg2 * 0.5);
+
+        } else if (att.subtype === 'falcon') {
+          // ── Millennium Falcon ───────────────────────────────
+          const fd = this.facingRight ? 1 : -1;
+          const bx = wx + fd * 6, by = wy - 6;
+          // Saucer hull
+          ag.fillStyle(att.color ?? 0xCCBB99, 1);
+          ag.fillEllipse(bx, by, 82, 30);
+          ag.lineStyle(2, 0x887755);
+          ag.strokeEllipse(bx, by, 82, 30);
+          // Top dome
+          ag.fillStyle(0xBBAA88, 1);
+          ag.fillEllipse(bx, by - 10, 42, 16);
+          ag.lineStyle(1.5, 0x887755);
+          ag.strokeEllipse(bx, by - 10, 42, 16);
+          // Cockpit pod (offset to forward side)
+          const cpx = bx + fd * 38;
+          ag.fillStyle(0x998866, 1);
+          ag.fillEllipse(cpx, by, 20, 13);
+          ag.lineStyle(1.5, 0x887755);
+          ag.strokeEllipse(cpx, by, 20, 13);
+          ag.fillStyle(0x88CCFF, 0.8);
+          ag.fillEllipse(cpx + fd * 3, by, 9, 7);
+          // Radar dish (displaced)
+          const rdx = bx - fd * 10, rdy = by - 17;
+          ag.fillStyle(0xCCCCBB, 1);
+          ag.fillCircle(rdx, rdy, 8);
+          ag.lineStyle(1.5, 0x887755);
+          ag.strokeCircle(rdx, rdy, 8);
+          ag.lineBetween(rdx, rdy, rdx, by - 9);
+          // Hull detail lines
+          ag.lineStyle(1, 0xAA9966, 0.6);
+          ag.lineBetween(bx - 26, by - 4, bx + 26, by - 4);
+          ag.lineBetween(bx - 20, by + 5, bx + 20, by + 5);
+          // Engine glow (rear)
+          const eg3 = 7 + Math.sin(this.wobbleTime * 12) * 3;
+          const ex = bx - fd * 37;
+          ag.fillStyle(0x44AAFF, 0.9);
+          ag.fillCircle(ex, by - 4, eg3 * 0.75);
+          ag.fillCircle(ex, by + 4, eg3 * 0.75);
+          ag.fillStyle(0xAADDFF, 0.75);
+          ag.fillCircle(ex, by - 4, eg3 * 0.45);
+          ag.fillCircle(ex, by + 4, eg3 * 0.45);
 
         } else if (att.subtype === 'submarine') {
           // ── Submarine ───────────────────────────────────────

@@ -1,8 +1,14 @@
 const ITEM_DB = [
   // Special actions (must be first — their keywords are substrings of other items)
-  { keywords: ['house', 'adu', 'home', 'cabin', 'shack', 'hut'], name: 'House', emoji: '🏠', position: 'none', type: 'house', placesHouse: true, color: 0xD2B48C, description: 'A cozy house! Step inside to pause the clock!' },
+  { keywords: ['house', 'adu', 'home', 'cabin', 'shack', 'hut'], name: 'House', emoji: '🏠', position: 'none', type: 'house', placesHouse: true, color: 0xD2B48C, description: 'A cozy house! Jump at the door to pause the clock!' },
   { keywords: ['cat', 'cats', 'kitty', 'kitten', 'meow', 'tabby', 'feline', 'pussycat', 'kittens'], name: 'Cat Swarm', emoji: '🐱', position: 'none', type: 'cats', catSwarm: true, color: 0xFF8844, description: 'A swarm of cats! They attack birds and give NPCs TOXOPLASMOSIS!' },
   { keywords: ['at-at', 'atat', 'at at', 'imperial walker', 'star wars walker', 'atst'], name: 'AT-AT Walker', emoji: '🤖', position: 'feet', type: 'atat', speed: 50, color: 0xBBBBBB, description: 'The Imperial AT-AT Walker! Plods slowly but fires LASER BLASTS at NPCs for +5pts!' },
+
+  // Star Wars vehicles
+  { keywords: ['speeder bike', 'speederbike', 'scout bike', 'imperial speeder', 'scout trooper'], name: 'Speeder Bike', emoji: '🏍', position: 'feet', type: 'wheels', subtype: 'speeder', speed: 225, rams: true, color: 0x999988, description: 'VROOM! Imperial Scout Speeder. Fast, low, and rams NPCs flying!' },
+  { keywords: ['x-wing', 'xwing', 'x wing', 'x fighter', 'x-fighter', 'xfighter', 'rebel fighter', 'rebel ship'], name: 'X-Wing', emoji: '✈️', position: 'back', type: 'jetpack', subtype: 'xwing', canFly: true, flySpeed: -230, speed: 140, color: 0xCCCCCC, description: 'Red Leader standing by! Four engines, four wings, pure rebel cool.' },
+  { keywords: ['tie fighter', 'tiefighter', 'tie-fighter', 'tie ship', 'imperial fighter'], name: 'TIE Fighter', emoji: '🛸', position: 'back', type: 'jetpack', subtype: 'tiefighter', canFly: true, flySpeed: -210, speed: 125, color: 0x222233, description: 'SCREEEEE! Twin Ion Engines. Hexagonal wings. Zero ejection seat.' },
+  { keywords: ['millennium falcon', 'millenium falcon', 'millennial falcon', 'the falcon', 'han solo ship', 'kessel run', 'falcon'], name: 'Millennium Falcon', emoji: '🛸', position: 'back', type: 'jetpack', subtype: 'falcon', canFly: true, flySpeed: -175, speed: 185, color: 0xCCBB99, description: 'She may not look like much, but she\'s got it where it counts! Radar dish included.' },
 
   // Flying
   { keywords: ['jetpack', 'jet pack'], name: 'Jetpack', emoji: '🚀', position: 'back', type: 'jetpack', canFly: true, flySpeed: -180, speed: 30, color: 0x888888, description: 'WHOOOOSH! Strapped to your back and ready to blast!' },
@@ -72,10 +78,20 @@ export class BuildSystem {
   interpret(rawInput) {
     const input = rawInput.toLowerCase().trim();
 
-    // Check all keyword lists
+    // Pass 1: exact keyword match (prevents substring false-positives)
     for (const item of ITEM_DB) {
       for (const kw of item.keywords) {
-        if (input === kw || input.includes(kw) || kw.includes(input)) {
+        if (input === kw) {
+          const { keywords, ...rest } = item;
+          return { ...rest };
+        }
+      }
+    }
+
+    // Pass 2: substring match
+    for (const item of ITEM_DB) {
+      for (const kw of item.keywords) {
+        if (input.includes(kw) || kw.includes(input)) {
           const { keywords, ...rest } = item;
           return { ...rest };
         }

@@ -46,10 +46,11 @@ export class NPC {
     this.isAngry     = true;
     this.angryTarget = target;
     this.speed       = this.baseSpeed * 0.65; // slow shambling
-    const t = this.scene.add.text(this.physBody.x, this.physBody.y - 70, '🐱😵 TOXO!', {
-      fontSize: '13px', fill: '#88FF44', stroke: '#000', strokeThickness: 2,
-    }).setOrigin(0.5).setDepth(40);
-    this.scene.tweens.add({ targets: t, y: t.y - 28, alpha: 0, duration: 1400, onComplete: () => t.destroy() });
+    const t = this.scene.add.text(this.physBody.x, this.physBody.y - 60, '🐱 TOXOPLASMOSIS!\n😵 ZOMBIFIED!', {
+      fontSize: '16px', fill: '#88FF44', stroke: '#000', strokeThickness: 3, fontStyle: 'bold', align: 'center',
+    }).setOrigin(0.5).setDepth(60);
+    this.scene.tweens.add({ targets: t, y: t.y - 50, alpha: 0, duration: 1800, onComplete: () => t.destroy() });
+    this.scene.cameras.main.flash(350, 0, 180, 0);
   }
 
   giveUp() {

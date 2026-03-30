@@ -100,6 +100,9 @@ export default class WobblyScene extends Phaser.Scene {
     this._house             = null;
     this._inHouse           = false;
     this._houseText         = null;
+    this._doorHintText      = null;
+    this._nearHouseDoor     = false;
+    this._houseDoorConsumed = false;
     // Cat swarm
     this._cats              = [];
     this._catGfx            = null;
@@ -138,6 +141,9 @@ export default class WobblyScene extends Phaser.Scene {
     this._touchJumpJustDown = false;
     this._house             = null;
     this._inHouse           = false;
+    this._nearHouseDoor     = false;
+    this._houseDoorConsumed = false;
+    this._doorHintText      = null;
     this._cats              = [];
     this._atatFireTimer     = 0;
     this._atatLasers        = [];
@@ -698,7 +704,7 @@ export default class WobblyScene extends Phaser.Scene {
       fontSize: '12px', fill: '#aaa', stroke: '#000', strokeThickness: 2,
     }).setScrollFactor(0).setDepth(100);
 
-    this.add.text(W - 6, H - 6, 'V 4.0', {
+    this.add.text(W - 6, H - 6, 'V 4.1', {
       fontSize: '11px', fill: '#555', stroke: '#000', strokeThickness: 1,
     }).setOrigin(1, 1).setScrollFactor(0).setDepth(100);
 
@@ -741,9 +747,10 @@ export default class WobblyScene extends Phaser.Scene {
     // Wrapper keeps input + button together and always on-screen
     this._buildBarEl = document.createElement('div');
     Object.assign(this._buildBarEl.style, {
-      position:'fixed', bottom:'11px',
+      position:'fixed',
+      bottom:'max(11px, calc(env(safe-area-inset-bottom, 0px) + 6px))',
       left:'50%', transform:'translateX(-50%)',
-      width:'min(490px, 94vw)',
+      width:'min(490px, calc(100vw - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px) - 16px))',
       display:'flex', gap:'4px', zIndex:'1000',
     });
     this._buildBarEl.appendChild(this.buildInputEl);
@@ -777,9 +784,12 @@ export default class WobblyScene extends Phaser.Scene {
       return btn;
     };
 
-    this._touchBtnLeft  = mk('◀', { bottom: '62px', left: '12px' });
-    this._touchBtnRight = mk('▶', { bottom: '62px', left: '90px' });
-    this._touchBtnJump  = mk('▲', { bottom: '62px', right: '12px', width: '80px', height: '80px', fontSize: '34px', lineHeight: '80px' });
+    const safeB = 'max(62px, calc(env(safe-area-inset-bottom, 0px) + 62px))';
+    const safeL = 'max(12px, calc(env(safe-area-inset-left, 0px) + 12px))';
+    const safeR = 'max(12px, calc(env(safe-area-inset-right, 0px) + 12px))';
+    this._touchBtnLeft  = mk('◀', { bottom: safeB, left: safeL });
+    this._touchBtnRight = mk('▶', { bottom: safeB, left: `max(90px, calc(env(safe-area-inset-left, 0px) + 90px))` });
+    this._touchBtnJump  = mk('▲', { bottom: safeB, right: safeR, width: '80px', height: '80px', fontSize: '34px', lineHeight: '80px' });
 
     const bind = (btn, onDown, onUp) => {
       const pd = e => e.preventDefault();
@@ -1272,6 +1282,9 @@ export default class WobblyScene extends Phaser.Scene {
     if (!this._gameStarted) return;
     const dt = delta / 1000;
 
+    // House door check BEFORE stickman processes space key
+    this._checkHouseDoor();
+
     this.stickman?.update(time, delta, this.cursors, this.spaceKey);
 
     // ── Touch controls (applied after keyboard update) ────────
@@ -1287,11 +1300,13 @@ export default class WobblyScene extends Phaser.Scene {
         this.stickman.isMoving = true;
       }
     }
-    if (this.stickman && this._touchJumpJustDown) {
+    if (this.stickman && this._touchJumpJustDown && !this._houseDoorConsumed) {
       this._touchJumpJustDown = false;
       if (this.stickman.physBody.body.blocked.down && !this.stickman.isFalling) {
         this.stickman.physBody.body.setVelocityY(this.stickman.jumpVelocity);
       }
+    } else if (this._houseDoorConsumed) {
+      this._touchJumpJustDown = false;
     }
     if (this.stickman && this._touchJump && this.stickman.canFly
         && !this.stickman.physBody.body.blocked.down && !this.stickman.isFalling) {
@@ -1316,7 +1331,6 @@ export default class WobblyScene extends Phaser.Scene {
     }
 
     // Score counts down 1 point per second (paused while inside house)
-    this._checkHouse();
     if (!this._inHouse) this.score -= dt;
     this._updateScoreDisplay();
     if (this._houseText) this._houseText.setVisible(this._inHouse);
@@ -1353,13 +1367,18 @@ export default class WobblyScene extends Phaser.Scene {
 
   _placeHouse() {
     if (this._house) {
-      this._showMsg('🏠 House already built!\nWalk into the doorway to pause the clock.');
+      this._showMsg('🏠 House already built!\nWalk to the door and jump to enter/exit.');
       return;
     }
     const fd = this.stickman.facingRight ? 1 : -1;
     const hx = this.stickman.x + fd * 110;
     this._house = { x: hx, w: 90, gfx: this.add.graphics().setDepth(5) };
     this._drawHouseGraphic(this._house.gfx, hx);
+    // Floating hint above the door
+    this._doorHintText = this.add.text(hx, GROUND_Y - 85, '⬆ JUMP\nto enter', {
+      fontSize: '13px', fill: '#FFE44D', stroke: '#000', strokeThickness: 2, align: 'center',
+    }).setOrigin(0.5, 1).setDepth(91).setVisible(false);
+    this._showMsg('🏠 House built!\nWalk to the door and jump ▲ to enter!');
   }
 
   _drawHouseGraphic(g, hx) {
@@ -1403,15 +1422,28 @@ export default class WobblyScene extends Phaser.Scene {
     g.strokeRect(hx + hw/2 - 26, hy - hh - 48, 14, 20);
   }
 
-  _checkHouse() {
-    if (!this._house) { this._inHouse = false; return; }
+  _checkHouseDoor() {
+    this._houseDoorConsumed = false;
+    if (!this._house) { this._nearHouseDoor = false; this._doorHintText?.setVisible(false); return; }
+
     const px = this.stickman.x;
-    const wasInside = this._inHouse;
-    this._inHouse = px > this._house.x - 42 && px < this._house.x + 42;
-    if (this._inHouse && !wasInside) {
-      this._showMsg('🏠 Cozy! Clock paused while you\'re inside.');
-    } else if (!this._inHouse && wasInside) {
-      this._showMsg('🏠 Back outside.\nClock is ticking again!');
+    const onGround = this.stickman.physBody.body.blocked.down;
+    this._nearHouseDoor = onGround && Math.abs(px - this._house.x) < 32;
+
+    const jumpPressed = Phaser.Input.Keyboard.JustDown(this.spaceKey) || this._touchJumpJustDown;
+
+    if (this._nearHouseDoor && jumpPressed) {
+      // Toggle entry/exit
+      this._inHouse = !this._inHouse;
+      this._houseDoorConsumed = true;
+      if (this._touchJumpJustDown) this._touchJumpJustDown = false;
+      this.stickman._suppressNextJump = true;
+      this._doorHintText?.setVisible(false);
+      this._showMsg(this._inHouse ? '🏠 Inside! Clock paused!' : '🏠 Back outside — clock running!');
+    } else if (this._doorHintText) {
+      const showHint = this._nearHouseDoor;
+      this._doorHintText.setVisible(showHint);
+      if (showHint) this._doorHintText.setText(this._inHouse ? '⬆ JUMP\nto exit' : '⬆ JUMP\nto enter');
     }
   }
 
@@ -1485,7 +1517,11 @@ export default class WobblyScene extends Phaser.Scene {
         }
         const spd = cat.target.type === 'bird' ? 310 : 175;
         cat.vx = (dx / dist) * spd;
-        if (cat.target.type === 'bird' && cat.y >= GROUND_Y - 20) cat.vy = -(Math.abs(dy) + 80);
+        // For birds: physics-based jump to reach target height (v = sqrt(2*g*h))
+        if (cat.target.type === 'bird' && cat.y >= GROUND_Y - 22) {
+          const h = Math.abs(ty - (GROUND_Y - 22)) + 40;
+          cat.vy = -Math.sqrt(2 * 430 * h);
+        }
       }
       this._drawCat(g, cat.x, cat.y, cat.phase, cat.vx >= 0);
     }
