@@ -58,6 +58,9 @@ export default class WobblyScene extends Phaser.Scene {
     this.buildInputEl    = null;
     this.buildBtnEl      = null;
     this._buildBarEl     = null;
+    this._micBtnEl       = null;
+    this._speechRec      = null;
+    this._micListening   = false;
     this.attachmentText  = null;
     this.islandLabel     = null;
     this.scoreText       = null;
@@ -150,10 +153,15 @@ export default class WobblyScene extends Phaser.Scene {
     this.mountainDefs       = [];
     this._playerMtnColliders = [];
 
+    // Stop any active speech recognition
+    if (this._speechRec) { try { this._speechRec.stop(); } catch (_) {} this._speechRec = null; }
+    this._micListening = false;
+
     // Remove leftover DOM elements from previous run
     if (this._buildBarEl?.parentNode)   { this._buildBarEl.remove();   this._buildBarEl   = null; }
     if (this.buildInputEl?.parentNode)  { this.buildInputEl.remove();  this.buildInputEl  = null; }
     if (this.buildBtnEl?.parentNode)    { this.buildBtnEl.remove();    this.buildBtnEl    = null; }
+    if (this._micBtnEl?.parentNode)     { this._micBtnEl.remove();     this._micBtnEl     = null; }
     if (this._touchBtnLeft?.parentNode) { this._touchBtnLeft.remove(); this._touchBtnLeft = null; }
     if (this._touchBtnRight?.parentNode){ this._touchBtnRight.remove();this._touchBtnRight= null; }
     if (this._touchBtnJump?.parentNode) { this._touchBtnJump.remove(); this._touchBtnJump = null; }
@@ -704,7 +712,7 @@ export default class WobblyScene extends Phaser.Scene {
       fontSize: '12px', fill: '#aaa', stroke: '#000', strokeThickness: 2,
     }).setScrollFactor(0).setDepth(100);
 
-    this.add.text(W - 6, H - 6, 'V 4.1', {
+    this.add.text(W - 6, H - 6, 'V 4.2', {
       fontSize: '11px', fill: '#555', stroke: '#000', strokeThickness: 1,
     }).setOrigin(1, 1).setScrollFactor(0).setDepth(100);
 
@@ -744,6 +752,33 @@ export default class WobblyScene extends Phaser.Scene {
       fontSize:'14px', fontWeight:'bold', cursor:'pointer',
     });
 
+    // Mic button
+    this._micBtnEl = document.createElement('button');
+    this._micBtnEl.textContent = '🎤';
+    this._micBtnEl.title = 'Speak to build';
+    Object.assign(this._micBtnEl.style, {
+      flexShrink:'0', width:'44px', height:'38px',
+      background:'rgba(10,10,30,0.92)', border:'2px solid #4a90e2',
+      borderRadius:'6px', color:'#fff', fontSize:'20px', cursor:'pointer',
+      WebkitTapHighlightColor:'transparent',
+    });
+    // Inject pulse animation once
+    if (!document.getElementById('mic-pulse-style')) {
+      const s = document.createElement('style');
+      s.id = 'mic-pulse-style';
+      s.textContent = `@keyframes mic-pulse{0%,100%{box-shadow:0 0 0 0 rgba(220,50,50,0.6)}50%{box-shadow:0 0 0 9px rgba(220,50,50,0)}}.mic-on{animation:mic-pulse 0.9s ease-in-out infinite;border-color:#e74c3c!important;background:#c0392b!important;}`;
+      document.head.appendChild(s);
+    }
+    const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRec) {
+      this._micBtnEl.style.opacity = '0.35';
+      this._micBtnEl.title = 'Speech not supported in this browser';
+    } else {
+      const onMic = e => { e.preventDefault(); e.stopPropagation(); this._toggleMic(); };
+      this._micBtnEl.addEventListener('click', onMic);
+      this._micBtnEl.addEventListener('touchend', onMic, { passive: false });
+    }
+
     // Wrapper keeps input + button together and always on-screen
     this._buildBarEl = document.createElement('div');
     Object.assign(this._buildBarEl.style, {
@@ -754,6 +789,7 @@ export default class WobblyScene extends Phaser.Scene {
       display:'flex', gap:'4px', zIndex:'1000',
     });
     this._buildBarEl.appendChild(this.buildInputEl);
+    this._buildBarEl.appendChild(this._micBtnEl);
     this._buildBarEl.appendChild(this.buildBtnEl);
     document.body.appendChild(this._buildBarEl);
 
@@ -814,6 +850,73 @@ export default class WobblyScene extends Phaser.Scene {
     document.body.appendChild(this._touchBtnLeft);
     document.body.appendChild(this._touchBtnRight);
     document.body.appendChild(this._touchBtnJump);
+  }
+
+  // ── Microphone / speech-to-build ─────────────────────────
+
+  _toggleMic() {
+    if (this._micListening) {
+      try { this._speechRec?.stop(); } catch (_) {}
+      return;
+    }
+    if (!this._speechRec) this._initSpeech();
+    try {
+      this._speechRec.start();
+    } catch (_) {
+      // Already started or unavailable; reset state
+      this._micListening = false;
+      this._micBtnEl?.classList.remove('mic-on');
+    }
+  }
+
+  _initSpeech() {
+    const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRec) return;
+
+    const rec = new SpeechRec();
+    rec.continuous      = false;
+    rec.interimResults  = true;
+    rec.lang            = 'en-US';
+    rec.maxAlternatives = 1;
+
+    rec.onstart = () => {
+      this._micListening = true;
+      this._micBtnEl?.classList.add('mic-on');
+      this._micBtnEl && (this._micBtnEl.textContent = '🔴');
+      if (this.buildInputEl) {
+        this.buildInputEl.value = '';
+        this.buildInputEl.placeholder = '🎤 Listening…';
+      }
+    };
+
+    rec.onresult = (event) => {
+      const latest = event.results[event.results.length - 1];
+      const text   = latest[0].transcript.trim();
+      if (this.buildInputEl) this.buildInputEl.value = text;
+      if (latest.isFinal && text) {
+        // small delay so user sees what was heard before it builds
+        this.time.delayedCall(180, () => this._handleBuild());
+      }
+    };
+
+    const _reset = () => {
+      this._micListening = false;
+      this._micBtnEl?.classList.remove('mic-on');
+      this._micBtnEl && (this._micBtnEl.textContent = '🎤');
+      if (this.buildInputEl) this.buildInputEl.placeholder = 'What to build? (boat, jetpack, wings…)';
+    };
+
+    rec.onerror = (event) => {
+      _reset();
+      if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
+        this._showMsg('🎤 Mic blocked!\nAllow microphone in browser settings.');
+      }
+      // 'no-speech', 'aborted', etc. are silently ignored
+    };
+
+    rec.onend = _reset;
+
+    this._speechRec = rec;
   }
 
   // ── Build ─────────────────────────────────────────────────
@@ -1731,13 +1834,16 @@ export default class WobblyScene extends Phaser.Scene {
 
   shutdown() {
     this._stopMusic();
+    if (this._speechRec) { try { this._speechRec.stop(); } catch (_) {} this._speechRec = null; }
     this._inGameOver    = false;
     this._awaitingStart = false;
     this._gameStarted   = false;
     this._lbText        = null;
     this.buildInputEl?.remove();
     this.buildBtnEl?.remove();
+    this._micBtnEl?.remove();
     this.buildInputEl = null;
     this.buildBtnEl   = null;
+    this._micBtnEl    = null;
   }
 }
